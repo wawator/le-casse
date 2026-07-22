@@ -1,0 +1,30 @@
+.wrap {
+  width: 5.5rem;
+  height: 5.5rem;
+}
+
+.dial {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: settle 700ms var(--ease-out) backwards;
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: rotate(-40deg) scale(0.85);
+  }
+  70% {
+    transform: rotate(8deg) scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dial {
+    animation: none;
+  }
+}

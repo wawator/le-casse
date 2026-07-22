@@ -1,0 +1,23 @@
+.frame {
+  position: relative;
+  width: 11rem;
+  height: 11rem;
+}
+
+.shadow {
+  position: absolute;
+  inset: 0;
+  transform: translate(0.5rem, 0.5rem);
+  background: var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.card {
+  position: absolute;
+  inset: 0;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

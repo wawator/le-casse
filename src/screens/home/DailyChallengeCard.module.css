@@ -1,0 +1,90 @@
+.card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  min-height: 5.5rem;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.card:active {
+  transform: scale(0.98);
+}
+
+.card--not-played {
+  background: var(--color-ink);
+  color: var(--color-bg);
+}
+
+.card--won {
+  background: var(--color-accent);
+  color: var(--color-ink);
+}
+
+.card--lost {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.card--in-progress {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  border: 2px solid var(--color-ink);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-lg);
+}
+
+.subtitle {
+  font-size: var(--text-sm);
+}
+
+.card--not-played .subtitle {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.card--lost .subtitle {
+  color: var(--color-text-secondary);
+}
+
+.card--in-progress .subtitle {
+  color: var(--color-text-secondary);
+}
+
+.card--won .subtitle {
+  color: rgba(21, 24, 30, 0.7);
+}
+
+.badge {
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card--won .badge {
+  background: rgba(21, 24, 30, 0.12);
+}
+
+.card--lost .badge {
+  background: rgba(21, 24, 30, 0.08);
+}

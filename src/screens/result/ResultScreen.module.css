@@ -1,0 +1,227 @@
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5);
+  padding-top: max(var(--space-5), env(safe-area-inset-top));
+  padding-bottom: max(var(--space-6), env(safe-area-inset-bottom));
+  gap: var(--space-5);
+}
+
+.screen--won {
+  background: var(--color-accent);
+  color: var(--color-ink);
+}
+
+.screen--lost {
+  background: var(--color-ink);
+  color: var(--color-bg);
+}
+
+.closeButton {
+  align-self: flex-start;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  border-radius: 50%;
+  border: none;
+  background: rgba(21, 24, 30, 0.1);
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.screen--lost .closeButton {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+}
+
+.title {
+  font-size: var(--text-3xl);
+  line-height: 1;
+  animation: celebrate 500ms var(--ease-out) backwards;
+}
+
+.screen--lost .title {
+  animation: settleIn 400ms var(--ease-out) backwards;
+}
+
+@keyframes celebrate {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  70% {
+    transform: scale(1.08);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes settleIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title {
+    animation: none;
+  }
+}
+
+.subtitle {
+  font-size: var(--text-base);
+  opacity: 0.85;
+}
+
+.revealRow {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: center;
+}
+
+.revealPeg {
+  animation: spotlight 400ms var(--ease-out) backwards;
+}
+
+@keyframes spotlight {
+  from {
+    opacity: 0;
+    transform: scale(0.5) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .revealPeg {
+    animation: none;
+  }
+}
+
+.statsRow {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: var(--space-4);
+  background: rgba(21, 24, 30, 0.08);
+  border-radius: var(--radius-lg);
+}
+
+.screen--lost .statsRow {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.statValue {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-xl);
+}
+
+.statLabel {
+  font-size: var(--text-xs);
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ticketWrap {
+  display: flex;
+  justify-content: center;
+}
+
+.actions {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.shareButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  justify-content: center;
+  min-height: var(--touch-min);
+  padding: 0.9rem var(--space-6);
+  border-radius: var(--radius-pill);
+  border: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-base);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.shareButton:active {
+  transform: scale(0.97);
+}
+
+.screen--won .shareButton {
+  background: var(--color-ink);
+  color: var(--color-bg);
+}
+
+.screen--lost .shareButton {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+
+.copiedHint {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  animation: fadeIn 150ms var(--ease-out);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.secondaryAction {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.75;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+}

@@ -1,0 +1,38 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-surface);
+  padding: 0.4rem 0.75rem 0.4rem 0.5rem;
+  border-radius: var(--radius-pill);
+}
+
+.chain {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.link {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: pop var(--duration-base) var(--ease-out) backwards;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.label {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-sm);
+}

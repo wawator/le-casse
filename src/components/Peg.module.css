@@ -1,0 +1,57 @@
+.peg {
+  --peg-size: 2.75rem;
+  width: var(--peg-size);
+  height: var(--peg-size);
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1rem;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.peg--sm {
+  --peg-size: 1.75rem;
+  font-size: 0.75rem;
+}
+
+.peg--lg {
+  --peg-size: 3.25rem;
+  font-size: 1.125rem;
+}
+
+.peg--empty {
+  background: var(--color-surface);
+  border: 2px dashed var(--color-border);
+}
+
+.peg--interactive {
+  cursor: pointer;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+}
+
+.peg--interactive:active {
+  transform: scale(0.92);
+}
+
+.peg--selected {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 3px;
+}
+
+.letter {
+  color: #ffffff;
+  text-shadow:
+    0 0 2px rgba(21, 24, 30, 0.9),
+    0 1px 1px rgba(21, 24, 30, 0.9),
+    0 -1px 1px rgba(21, 24, 30, 0.9),
+    1px 0 1px rgba(21, 24, 30, 0.9),
+    -1px 0 1px rgba(21, 24, 30, 0.9);
+}

@@ -1,0 +1,11 @@
+.palette {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  justify-items: center;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.palette--disabled {
+  opacity: 0.4;
+}

@@ -1,0 +1,22 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.2rem;
+  width: 1.75rem;
+  flex-shrink: 0;
+}
+
+.dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 0.2rem;
+  background: var(--color-border);
+}
+
+.dot--well {
+  background: var(--indicator-well-placed);
+}
+
+.dot--misplaced {
+  background: var(--indicator-misplaced);
+}
