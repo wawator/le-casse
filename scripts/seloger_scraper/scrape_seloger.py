@@ -101,15 +101,40 @@ SIRET_PATTERN = re.compile(r"\b\d{3}\s?\d{3}\s?\d{3}\s?\d{5}\b")  # 14 chiffres
 # si rien n'est trouvé du premier coup.
 MODAL_TRIGGER_TEXTS = ["Détails et honoraires", "Mentions légales", "mentions légales", "détails et honoraires"]
 
-# Nombre d'annonces vente/location : XPath fourni par l'utilisateur sur la
-# fiche détail (le JSON du listing renvoie toujours 0, non fiable).
-PROPERTIES_COUNT_XPATH = "xpath=//*[@id='properties']/div[2]"
+# Nombre d'annonces vente/location : élément #properties de la fiche détail
+# (le JSON du listing renvoie toujours 0, non fiable). L'utilisateur a
+# d'abord pointé //*[@id="properties"]/div[2], mais ce div ne contient que
+# le libellé "Biens à vendre (106)" — on prend tout le conteneur #properties
+# pour attraper aussi le compteur location, quel que soit son index.
+PROPERTIES_SELECTOR = "#properties"
 
-# Fenêtre de proximité volontairement courte (quelques caractères) pour ne
-# pas confondre le compteur vente et le compteur location quand les deux
-# libellés sont proches dans le texte (ex: "En vente (24) En location (5)").
-COUNT_KEYWORD_THEN_NUMBER = re.compile(r"(vente|location)\D{0,3}(\d[\d\s]{0,6})", re.IGNORECASE)
-COUNT_NUMBER_THEN_KEYWORD = re.compile(r"(\d[\d\s]{0,6})\s*annonces?\s*(?:en\s*)?(vente|location)", re.IGNORECASE)
+# Libellés réels observés : "Biens à vendre (N)" / vraisemblablement
+# "Biens à louer (N)" pour la location (pas "vente"/"location" comme deviné
+# initialement). On garde les deux jeux de mots-clés pour couvrir d'autres
+# formulations possibles ailleurs sur le site.
+SALE_LABELS = ["vendre", "vente"]
+RENT_LABELS = ["louer", "location"]
+_ALL_COUNT_LABELS = "vendre|louer|vente|location"
+
+# Nombre entre parenthèses juste après le libellé (format confirmé) : priorité 1.
+COUNT_LABEL_PAREN = re.compile(rf"(?P<label>{_ALL_COUNT_LABELS})\D{{0,15}}?\((?P<number>\d[\d\s]*)\)", re.IGNORECASE)
+# "X annonces en <libellé>" : priorité 2.
+COUNT_NUMBER_THEN_LABEL = re.compile(
+    rf"(?P<number>\d[\d\s]{{0,6}})\s*annonces?\s*(?:en\s*)?(?P<label>{_ALL_COUNT_LABELS})", re.IGNORECASE
+)
+# Libellé suivi d'un nombre à courte distance, sans parenthèses : filet de
+# sécurité en dernier recours (peut accrocher le mauvais nombre si deux
+# libellés se touchent, cf. tests).
+COUNT_LABEL_THEN_NUMBER = re.compile(rf"(?P<label>{_ALL_COUNT_LABELS})\D{{0,3}}(?P<number>\d[\d\s]{{0,6}})", re.IGNORECASE)
+
+
+def canonical_count_label(word: str) -> str:
+    w = word.lower()
+    if w in SALE_LABELS:
+        return "vente"
+    if w in RENT_LABELS:
+        return "location"
+    return w
 
 # Clés JSON candidates (recherche récursive, insensible à la casse, par
 # sous-chaîne) pour les champs de la fiche détail.
@@ -300,19 +325,14 @@ def html_to_text(raw_html: str) -> str:
 
 def parse_properties_counts(text: str) -> tuple[str, str]:
     counts = {"vente": "", "location": ""}
-    # Priorité à la formulation explicite "X annonces en <mot-clé>", sans
-    # ambiguïté. La forme "mot-clé ... nombre" (onglets courts type "Vente 24")
-    # ne sert qu'à compléter, car elle peut accrocher le nombre du mot-clé
-    # suivant quand les deux clauses se touchent (ex: "...en vente 5 annonces
-    # en location").
-    for m in COUNT_NUMBER_THEN_KEYWORD.finditer(text):
-        keyword = m.group(2).lower()
-        if not counts[keyword]:
-            counts[keyword] = re.sub(r"\D", "", m.group(1))
-    for m in COUNT_KEYWORD_THEN_NUMBER.finditer(text):
-        keyword = m.group(1).lower()
-        if not counts[keyword]:
-            counts[keyword] = re.sub(r"\D", "", m.group(2))
+    # Priorité au format confirmé "Biens à vendre (106)" (nombre entre
+    # parenthèses juste après le libellé), sans ambiguïté. Les formats plus
+    # génériques ne servent qu'à compléter si jamais la formulation diffère.
+    for pattern in (COUNT_LABEL_PAREN, COUNT_NUMBER_THEN_LABEL, COUNT_LABEL_THEN_NUMBER):
+        for m in pattern.finditer(text):
+            key = canonical_count_label(m.group("label"))
+            if key in counts and not counts[key]:
+                counts[key] = re.sub(r"\D", "", m.group("number"))
     return counts["vente"], counts["location"]
 
 
@@ -338,21 +358,22 @@ def open_legal_mentions_popup(page: Page) -> bool:
 
 
 def extract_properties_counts(page: Page) -> tuple[str, str]:
-    """Nombre d'annonces vente/location, via l'élément #properties de la fiche
-    détail (XPath fourni: //*[@id="properties"]/div[2]) — le JSON du listing
-    renvoie toujours 0, non fiable."""
+    """Nombre d'annonces vente/location, via le conteneur #properties de la
+    fiche détail (le JSON du listing renvoie toujours 0, non fiable). On lit
+    tout le conteneur plutôt qu'un enfant précis pour attraper les deux
+    compteurs (vente ET location) quel que soit leur index."""
     try:
-        locator = page.locator(PROPERTIES_COUNT_XPATH)
+        locator = page.locator(PROPERTIES_SELECTOR)
         count = locator.count()
         if count == 0:
-            log("  #properties/div[2] introuvable sur cette fiche (0 élément).")
+            log("  #properties introuvable sur cette fiche (0 élément) — probablement 0 bien en ligne.")
             return "", ""
         snippet = locator.first.inner_text(timeout=3000)
     except Exception as exc:
-        log(f"  Échec lecture #properties/div[2]: {exc}")
+        log(f"  Échec lecture #properties: {exc}")
         return "", ""
 
-    log(f"  Texte brut de #properties/div[2]: {snippet[:200]!r}")
+    log(f"  Texte brut de #properties: {snippet[:300]!r}")
     sale, rent = parse_properties_counts(snippet)
     if not sale and not rent:
         log("  Aucun nombre vente/location reconnu dans ce texte (regex à ajuster).")
