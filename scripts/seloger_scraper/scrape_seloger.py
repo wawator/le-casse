@@ -349,6 +349,7 @@ def run(
     min_delay: float,
     max_delay: float,
     dump_html_path: Path | None,
+    screenshot_path: Path | None,
 ) -> None:
     all_records: list[ClientRecord] = []
     seen_hrefs: set[str] = set()
@@ -377,6 +378,17 @@ def run(
         while True:
             log(f"--- Page {page_num} ---")
 
+            try:
+                page_title = page.title()
+            except Exception:
+                page_title = "<inconnu>"
+            try:
+                body_snippet = re.sub(r"\s+", " ", page.locator("body").inner_text(timeout=3000)).strip()[:300]
+            except Exception:
+                body_snippet = "<impossible de lire le body>"
+            log(f"Titre de la page: {page_title!r}")
+            log(f"Début du texte visible: {body_snippet!r}")
+
             if dump_html_path is not None:
                 html = page.content()
                 dump_file = dump_html_path if page_num == 1 else dump_html_path.with_name(
@@ -384,6 +396,16 @@ def run(
                 )
                 dump_file.write_text(html, encoding="utf-8")
                 log(f"HTML sauvegardé dans {dump_file}")
+
+            if screenshot_path is not None:
+                shot_file = screenshot_path if page_num == 1 else screenshot_path.with_name(
+                    f"{screenshot_path.stem}_p{page_num}{screenshot_path.suffix}"
+                )
+                try:
+                    page.screenshot(path=str(shot_file), full_page=True, timeout=10000)
+                    log(f"Capture d'écran sauvegardée dans {shot_file}")
+                except Exception as exc:
+                    log(f"Échec de la capture d'écran: {exc}")
 
             cards = find_result_cards(page)
             log(f"{len(cards)} carte(s) détectée(s) sur cette page.")
@@ -472,6 +494,11 @@ def main() -> None:
         default=None,
         help="Sauvegarde le HTML de chaque page listée dans ce fichier (utile pour debug/ajuster les sélecteurs).",
     )
+    parser.add_argument(
+        "--screenshot",
+        default=None,
+        help="Sauvegarde une capture d'écran (PNG) de chaque page listée (utile pour debug visuel).",
+    )
 
     args = parser.parse_args()
 
@@ -485,6 +512,7 @@ def main() -> None:
         min_delay=args.min_delay,
         max_delay=args.max_delay,
         dump_html_path=Path(args.dump_html) if args.dump_html else None,
+        screenshot_path=Path(args.screenshot) if args.screenshot else None,
     )
 
 

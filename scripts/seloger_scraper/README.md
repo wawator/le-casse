@@ -40,13 +40,24 @@ playwright install chromium
 python scrape_seloger.py \
   --url "https://www.seloger.com/annuaire/indre-et-loire-37/#intermediaryTypes=1" \
   --limit 5 --max-pages 1 --headed \
-  --dump-html debug_page1.html
+  --dump-html debug_page1.html --screenshot debug_page1.png
 ```
 
 `--headed` ouvre une vraie fenêtre de navigateur (utile pour voir ce qui se
 passe, résoudre un CAPTCHA manuellement si besoin, etc.). Regarde la sortie
-terminal : si "0 carte(s) détectée(s)", envoie-moi `debug_page1.html` (ou au
-moins l'extrait HTML d'une carte annonceur) pour que j'ajuste les sélecteurs.
+terminal : elle affiche maintenant le titre de la page et les 300 premiers
+caractères du texte visible à chaque étape — souvent suffisant pour repérer
+un blocage (page "Just a moment...", "Vérification en cours", "Accès
+refusé", etc.) sans même regarder le HTML.
+
+Si "0 carte(s) détectée(s)" :
+1. Colle-moi d'abord la sortie terminal complète (titre de page + texte visible).
+2. Si ça ne suffit pas, envoie-moi `debug_page1.png` (capture d'écran) en
+   pièce jointe — je peux la regarder directement.
+3. Si besoin de précision sur les sélecteurs, envoie `debug_page1.html`, ou
+   mieux : dans le navigateur (mode `--headed`), clic droit sur une carte
+   annonceur → Inspecter → clic droit sur l'élément dans le panneau Elements
+   → "Copy" → "Copy outerHTML", et colle-moi ce fragment.
 
 ## Lancement complet
 
