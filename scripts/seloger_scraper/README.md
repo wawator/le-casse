@@ -31,9 +31,15 @@ postale, SIRET, téléphone, lien page pro, site web pro.
 
 - SeLoger est protégé par un anti-bot (Datadome) et ses CGU peuvent interdire
   le scraping automatisé. Le script attend volontairement entre chaque page
-  (délai aléatoire 3-7s par défaut) — ne réduis pas ces délais de façon
-  agressive. Si tu vois des CAPTCHA apparaître régulièrement, c'est un signal
-  pour ralentir encore, pas pour insister.
+  (délai aléatoire **10-20s par défaut**, allongé après un blocage Datadome
+  observé en pratique sur un run de ~130 clients) — ne réduis pas ces délais.
+  Si tu vois des CAPTCHA apparaître, c'est un signal pour ralentir encore et
+  faire une vraie pause (plusieurs heures), pas pour insister : retenter tout
+  de suite ne fait que prolonger le blocage, et il n'y a pas de contournement
+  automatique proposé ici (ni rotation d'IP, ni résolution de CAPTCHA).
+- Scrape par petits lots espacés dans le temps plutôt qu'un département entier
+  d'un coup (voir `--start-page` / `--end-page` ci-dessous) — ex: un lot de
+  20-30 pages par session, avec une vraie pause avant de reprendre.
 - Usage prévu : étude de marché / prospection B2B sur des données
   professionnelles publiques (fiches d'agences immobilières). Ne redistribue
   pas les données extraites en violation des CGU du site.
@@ -77,17 +83,35 @@ python scrape_seloger.py \
   --output indre_et_loire_37.csv
 ```
 
+## Scraper par tranches de pages (recommandé pour un gros département)
+
+```bash
+# Session 1 : pages 1 à 10
+python scrape_seloger.py --url "..." --start-page 1 --end-page 10 --output paris_p1_10.csv
+
+# (pause de plusieurs heures)
+
+# Session 2 : pages 11 à 20
+python scrape_seloger.py --url "..." --start-page 11 --end-page 20 --output paris_p11_20.csv
+```
+
+Chaque lot part dans un fichier CSV séparé (change `--output` à chaque fois) —
+il suffira de les recoller ensuite (par ex. avec Excel/Numbers, ou dis-moi et
+je fais un petit script de fusion).
+
 ## Options utiles
 
 | Option | Description |
 | --- | --- |
-| `--max-pages N` | Limite le nombre de pages d'annuaire parcourues |
-| `--limit N` | Limite le nombre total de clients extraits |
+| `--start-page N` | Première page à scraper (défaut: 1) |
+| `--end-page N` | Dernière page à scraper, incluse (défaut: la dernière disponible) |
+| `--max-pages N` | Alternative à `--end-page` : nombre de pages à partir de `--start-page` |
+| `--limit N` | Limite le nombre total de clients extraits (utile pour tester) |
 | `--no-details` | N'ouvre pas la fiche détail de chaque client (plus rapide, mais adresse/téléphone/SIRET/nb annonces vides) |
 | `--headed` | Affiche le navigateur au lieu du mode headless |
-| `--min-delay` / `--max-delay` | Bornes (secondes) du délai aléatoire entre les pages/fiches |
-| `--dump-html PATH` | Sauvegarde le HTML de la page 1 du listing (debug) |
-| `--screenshot PATH` | Sauvegarde une capture d'écran de la page 1 du listing (debug) |
+| `--min-delay` / `--max-delay` | Bornes (secondes) du délai aléatoire entre les pages/fiches (défaut 10-20s) |
+| `--dump-html PATH` | Sauvegarde le HTML de la première page du listing (debug) |
+| `--screenshot PATH` | Sauvegarde une capture d'écran de la première page du listing (debug) |
 | `--dump-detail-html PATH` | Sauvegarde le HTML de la toute première fiche détail visitée (debug) |
 
 ## Une fois l'Indre-et-Loire (37) calé

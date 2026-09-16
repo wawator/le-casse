@@ -504,6 +504,8 @@ def fetch_listing_page(page: Page, url: str) -> tuple[dict | None, str]:
 def run(
     start_url: str,
     output_path: Path,
+    start_page: int,
+    end_page: int | None,
     max_pages: int | None,
     limit: int | None,
     with_details: bool,
@@ -534,8 +536,8 @@ def run(
         dismiss_cookie_banner(page)
         polite_wait(1.0, 2.0)
 
-        first_url = build_page_url(start_url, 1)
-        log(f"Chargement page 1: {first_url}")
+        first_url = build_page_url(start_url, start_page)
+        log(f"Chargement page {start_page}: {first_url}")
         next_data, html = fetch_listing_page(page, first_url)
 
         if dump_html_path is not None:
@@ -549,7 +551,7 @@ def run(
                 log(f"Échec de la capture d'écran: {exc}")
 
         if next_data is None:
-            log("ERREUR: bloc __NEXT_DATA__ introuvable ou invalide sur la page 1. "
+            log(f"ERREUR: bloc __NEXT_DATA__ introuvable ou invalide sur la page {start_page}. "
                 "Le site a peut-être changé de structure, ou une page de blocage/CAPTCHA "
                 "a été servie. Vérifie le HTML/la capture d'écran sauvegardés.")
             browser.close()
@@ -569,16 +571,28 @@ def run(
         first_batch = results.get("intermediaries", [])
         page_size = len(first_batch) or 1
         total_pages = max(1, math.ceil(total_count / page_size))
-        log(f"{total_count} client(s) au total, {page_size} par page => {total_pages} page(s).")
+        log(f"{total_count} client(s) au total, {page_size} par page => {total_pages} page(s) au total.")
 
-        if max_pages is not None:
-            total_pages = min(total_pages, max_pages)
+        if end_page is not None:
+            last_page = min(total_pages, end_page)
+        elif max_pages is not None:
+            last_page = min(total_pages, start_page + max_pages - 1)
+        else:
+            last_page = total_pages
 
-        page_num = 1
+        if start_page > total_pages:
+            log(f"start-page ({start_page}) dépasse le nombre de pages disponibles ({total_pages}), rien à faire.")
+            browser.close()
+            write_csv(all_records, output_path)
+            return
+
+        log(f"On scrape de la page {start_page} à la page {last_page} (sur {total_pages} au total).")
+
+        page_num = start_page
         batch = first_batch
 
         while True:
-            log(f"--- Page {page_num}/{total_pages}: {len(batch)} client(s) ---")
+            log(f"--- Page {page_num}/{last_page}: {len(batch)} client(s) ---")
 
             for item in batch:
                 record = record_from_intermediary(item)
@@ -612,7 +626,7 @@ def run(
                     write_csv(all_records, output_path)
                     return
 
-            if page_num >= total_pages:
+            if page_num >= last_page:
                 break
 
             page_num += 1
@@ -654,7 +668,22 @@ def main() -> None:
         help="URL de départ de l'annuaire (page listant les clients).",
     )
     parser.add_argument("--output", default="seloger_export.csv", help="Chemin du fichier CSV de sortie.")
-    parser.add_argument("--max-pages", type=int, default=None, help="Nombre max de pages à parcourir (défaut: toutes).")
+    parser.add_argument(
+        "--start-page", type=int, default=1, help="Première page à scraper (défaut: 1). Utile pour reprendre par tranches."
+    )
+    parser.add_argument(
+        "--end-page",
+        type=int,
+        default=None,
+        help="Dernière page à scraper, incluse (défaut: la dernière page disponible). "
+        "Ex: --start-page 10 --end-page 20 pour ne scraper que les pages 10 à 20.",
+    )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=None,
+        help="Nombre de pages à parcourir à partir de --start-page (ignoré si --end-page est fourni).",
+    )
     parser.add_argument("--limit", type=int, default=None, help="Nombre max de clients à extraire (utile pour tester).")
     parser.add_argument(
         "--no-details",
@@ -662,8 +691,18 @@ def main() -> None:
         help="Ne pas visiter la fiche détail de chaque client (plus rapide : nom/type/nb annonces/lien seulement).",
     )
     parser.add_argument("--headed", action="store_true", help="Affiche le navigateur (par défaut: headless).")
-    parser.add_argument("--min-delay", type=float, default=3.0, help="Délai minimum (s) entre les actions réseau.")
-    parser.add_argument("--max-delay", type=float, default=7.0, help="Délai maximum (s) entre les actions réseau.")
+    parser.add_argument(
+        "--min-delay",
+        type=float,
+        default=10.0,
+        help="Délai minimum (s) entre les actions réseau (défaut allongé après blocage Datadome observé).",
+    )
+    parser.add_argument(
+        "--max-delay",
+        type=float,
+        default=20.0,
+        help="Délai maximum (s) entre les actions réseau (défaut allongé après blocage Datadome observé).",
+    )
     parser.add_argument(
         "--dump-html",
         default=None,
@@ -685,6 +724,8 @@ def main() -> None:
     run(
         start_url=args.url,
         output_path=Path(args.output),
+        start_page=args.start_page,
+        end_page=args.end_page,
         max_pages=args.max_pages,
         limit=args.limit,
         with_details=not args.no_details,
