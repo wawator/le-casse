@@ -3,18 +3,31 @@
 Exporte en CSV les clients listés sur une page d'annuaire SeLoger
 (ex: `https://www.seloger.com/annuaire/indre-et-loire-37/#intermediaryTypes=1`) :
 nom, type de client, nb annonces vente, nb annonces location, adresse
-postale, SIRET / numéro de site, téléphone, lien page pro, site web pro.
+postale, SIRET, numéro de carte professionnelle, téléphone, lien page pro,
+site web pro.
+
+## Comment ça marche
+
+- **Page listing** (`/annuaire/<departement>/?page=N`) : les données (nom,
+  type, lien fiche pro) sont lues directement dans le bloc JSON
+  `__NEXT_DATA__` embarqué dans le HTML — vérifié contre un export réel du
+  site, fiable.
+- **Fiche détail** (`/professionnels-immobilier/<id>`) : adresse et téléphone
+  sont d'abord cherchés dans le JSON de la page si présent, avec un repli
+  texte/regex sinon. SIRET et numéro de carte professionnelle sont dans la
+  popup "Mentions légales" / "Détails et honoraires" — le script cherche
+  d'abord dans le HTML complet (même masqué par CSS avant clic), et clique
+  sur la popup en secours si rien n'est trouvé. Le nombre d'annonces
+  vente/location vient de l'élément `#properties` de la fiche détail (le
+  JSON du listing renvoie toujours 0, peu fiable).
+- Ces deux derniers points (popup légale, `#properties`) n'ont pas encore été
+  vérifiés contre un export HTML réel d'une fiche détail — si les champs
+  `siret_ou_numero_site`, `numero_carte_pro`, `nb_annonces_vente` ou
+  `nb_annonces_location` sortent vides ou faux, lance avec
+  `--dump-detail-html debug_detail.html --limit 1` et envoie-moi le fichier.
 
 ## ⚠️ À savoir avant de lancer
 
-- **Ce script n'a pas pu être testé contre le vrai site** (l'environnement où
-  il a été écrit n'a pas d'accès réseau à seloger.com). Les sélecteurs CSS et
-  les heuristiques de parsing (`scrape_seloger.py`, section du haut) sont un
-  premier jet raisonnable mais devront presque sûrement être ajustés.
-- **Méthode de mise au point recommandée** : lance d'abord un essai limité en
-  sauvegardant le HTML, puis envoie-moi soit les erreurs affichées dans le
-  terminal, soit directement le fichier HTML dump (voir plus bas) — je pourrai
-  corriger les sélecteurs précisément dessus.
 - SeLoger est protégé par un anti-bot (Datadome) et ses CGU peuvent interdire
   le scraping automatisé. Le script attend volontairement entre chaque page
   (délai aléatoire 3-7s par défaut) — ne réduis pas ces délais de façon
@@ -34,30 +47,25 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
-## Premier essai (debug, 5 clients max, HTML sauvegardé)
+## Premier essai (debug, 3 clients max)
 
 ```bash
 python scrape_seloger.py \
   --url "https://www.seloger.com/annuaire/indre-et-loire-37/#intermediaryTypes=1" \
-  --limit 5 --max-pages 1 --headed \
-  --dump-html debug_page1.html --screenshot debug_page1.png
+  --limit 3 --headed \
+  --dump-html debug_page1.html --screenshot debug_page1.png \
+  --dump-detail-html debug_detail.html
 ```
 
 `--headed` ouvre une vraie fenêtre de navigateur (utile pour voir ce qui se
-passe, résoudre un CAPTCHA manuellement si besoin, etc.). Regarde la sortie
-terminal : elle affiche maintenant le titre de la page et les 300 premiers
-caractères du texte visible à chaque étape — souvent suffisant pour repérer
-un blocage (page "Just a moment...", "Vérification en cours", "Accès
-refusé", etc.) sans même regarder le HTML.
+passe, résoudre un CAPTCHA manuellement si besoin, etc.). Regarde le CSV
+généré et la sortie terminal :
 
-Si "0 carte(s) détectée(s)" :
-1. Colle-moi d'abord la sortie terminal complète (titre de page + texte visible).
-2. Si ça ne suffit pas, envoie-moi `debug_page1.png` (capture d'écran) en
-   pièce jointe — je peux la regarder directement.
-3. Si besoin de précision sur les sélecteurs, envoie `debug_page1.html`, ou
-   mieux : dans le navigateur (mode `--headed`), clic droit sur une carte
-   annonceur → Inspecter → clic droit sur l'élément dans le panneau Elements
-   → "Copy" → "Copy outerHTML", et colle-moi ce fragment.
+- Si `nom_client` / `type_client` / `lien_page_pro` sont vides : problème sur
+  le listing, envoie-moi `debug_page1.html` ou `debug_page1.png`.
+- Si `adresse_postale` / `telephone` / `siret_ou_numero_site` /
+  `numero_carte_pro` / `nb_annonces_vente` / `nb_annonces_location` sont vides
+  ou faux : problème sur la fiche détail, envoie-moi `debug_detail.html`.
 
 ## Lancement complet
 
@@ -73,10 +81,12 @@ python scrape_seloger.py \
 | --- | --- |
 | `--max-pages N` | Limite le nombre de pages d'annuaire parcourues |
 | `--limit N` | Limite le nombre total de clients extraits |
-| `--no-details` | N'ouvre pas la fiche détail de chaque client (plus rapide, mais SIRET/site web pro souvent vides) |
+| `--no-details` | N'ouvre pas la fiche détail de chaque client (plus rapide, mais adresse/téléphone/SIRET/carte pro/nb annonces vides) |
 | `--headed` | Affiche le navigateur au lieu du mode headless |
 | `--min-delay` / `--max-delay` | Bornes (secondes) du délai aléatoire entre les pages/fiches |
-| `--dump-html PATH` | Sauvegarde le HTML de chaque page de résultats (debug) |
+| `--dump-html PATH` | Sauvegarde le HTML de la page 1 du listing (debug) |
+| `--screenshot PATH` | Sauvegarde une capture d'écran de la page 1 du listing (debug) |
+| `--dump-detail-html PATH` | Sauvegarde le HTML de la toute première fiche détail visitée (debug) |
 
 ## Une fois l'Indre-et-Loire (37) calé
 
