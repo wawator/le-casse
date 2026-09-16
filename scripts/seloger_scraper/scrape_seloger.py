@@ -357,6 +357,43 @@ def open_legal_mentions_popup(page: Page) -> bool:
     return False
 
 
+def extract_siret_via_popup(page: Page, initial_html: str) -> tuple[str, str]:
+    """Retourne (siret, html_final). Le SIRET n'apparaît qu'à l'intérieur de la
+    popup "Mentions légales" / "Détails et honoraires" (confirmé par
+    l'utilisateur, élément généré dynamiquement par React — son id change à
+    chaque session, donc inexploitable tel quel). On ouvre la popup puis on
+    cherche en priorité dans un élément role="dialog" (react-aria en pose un
+    systématiquement), avec en repli le texte apparu après clic mais absent
+    avant (pour ignorer tout 14-chiffres déjà présent ailleurs sur la page,
+    hors-sujet)."""
+    before_text = html_to_text(initial_html)
+
+    if not open_legal_mentions_popup(page):
+        log("  Popup Mentions légales/Détails et honoraires introuvable, pas de tentative de clic.")
+        return extract_siret_from_html(initial_html), initial_html
+
+    after_html = page.content()
+
+    try:
+        dialog = page.get_by_role("dialog")
+        if dialog.count() > 0:
+            dialog_text = dialog.first.inner_text(timeout=3000)
+            m = SIRET_PATTERN.search(dialog_text)
+            if m:
+                return m.group(0).replace(" ", ""), after_html
+    except Exception:
+        pass
+
+    after_text = html_to_text(after_html)
+    before_matches = {m.group(0) for m in SIRET_PATTERN.finditer(before_text)}
+    for m in SIRET_PATTERN.finditer(after_text):
+        if m.group(0) not in before_matches:
+            return m.group(0).replace(" ", ""), after_html
+
+    log("  Aucun SIRET nouveau trouvé après ouverture de la popup.")
+    return "", after_html
+
+
 def extract_properties_counts(page: Page) -> tuple[str, str]:
     """Nombre d'annonces vente/location, via le conteneur #properties de la
     fiche détail (le JSON du listing renvoie toujours 0, non fiable). On lit
@@ -413,15 +450,11 @@ def scrape_detail_page(
                 extra["site_web_pro"] = flat
                 break
 
-    # SIRET : cherché dans le HTML complet (contenu de la popup "Mentions
-    # légales" / "Détails et honoraires" possiblement masqué par CSS avant
-    # clic). Si rien trouvé, on tente d'ouvrir la popup et on réessaie.
-    siret = extract_siret_from_html(html)
-    if not siret:
-        if open_legal_mentions_popup(page):
-            html_after_click = page.content()
-            siret = extract_siret_from_html(html_after_click)
-            html = html_after_click  # pour le dump éventuel ci-dessous
+    # SIRET : n'existe que dans la popup "Mentions légales" / "Détails et
+    # honoraires" (confirmé par l'utilisateur) — on ouvre systématiquement
+    # la popup plutôt que de chercher d'abord dans la page brute, pour éviter
+    # d'accrocher un autre 14-chiffres présent ailleurs sur la page.
+    siret, html = extract_siret_via_popup(page, html)
     extra["siret_ou_numero_site"] = siret
 
     extra["nb_annonces_vente"], extra["nb_annonces_location"] = extract_properties_counts(page)
