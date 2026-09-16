@@ -3,8 +3,7 @@
 Exporte en CSV les clients listés sur une page d'annuaire SeLoger
 (ex: `https://www.seloger.com/annuaire/indre-et-loire-37/#intermediaryTypes=1`) :
 nom, type de client, nb annonces vente, nb annonces location, adresse
-postale, SIRET, numéro de carte professionnelle, téléphone, lien page pro,
-site web pro.
+postale, SIRET, téléphone, lien page pro, site web pro.
 
 ## Comment ça marche
 
@@ -14,17 +13,19 @@ site web pro.
   site, fiable.
 - **Fiche détail** (`/professionnels-immobilier/<id>`) : adresse et téléphone
   sont d'abord cherchés dans le JSON de la page si présent, avec un repli
-  texte/regex sinon. SIRET et numéro de carte professionnelle sont dans la
-  popup "Mentions légales" / "Détails et honoraires" — le script cherche
-  d'abord dans le HTML complet (même masqué par CSS avant clic), et clique
-  sur la popup en secours si rien n'est trouvé. Le nombre d'annonces
-  vente/location vient de l'élément `#properties` de la fiche détail (le
-  JSON du listing renvoie toujours 0, peu fiable).
-- Ces deux derniers points (popup légale, `#properties`) n'ont pas encore été
-  vérifiés contre un export HTML réel d'une fiche détail — si les champs
-  `siret_ou_numero_site`, `numero_carte_pro`, `nb_annonces_vente` ou
-  `nb_annonces_location` sortent vides ou faux, lance avec
-  `--dump-detail-html debug_detail.html --limit 1` et envoie-moi le fichier.
+  texte/regex sinon. Le SIRET est dans la popup "Mentions légales" /
+  "Détails et honoraires" — le script cherche d'abord dans le HTML complet
+  (même masqué par CSS avant clic), et clique sur la popup en secours si
+  rien n'est trouvé. Le nombre d'annonces vente/location vient de l'élément
+  `#properties` de la fiche détail (le JSON du listing renvoie toujours 0,
+  peu fiable) — **un bug faisait planter cette lecture en silence, corrigé**.
+- Ces deux points (popup légale, `#properties`) n'ont pas encore été
+  vérifiés contre un export HTML réel d'une fiche détail — si
+  `siret_ou_numero_site`, `nb_annonces_vente` ou `nb_annonces_location`
+  sortent vides ou faux, lance avec
+  `--dump-detail-html debug_detail.html --limit 1` et envoie-moi le fichier
+  (la sortie terminal affiche maintenant le texte brut lu dans `#properties`,
+  ça aide déjà à voir ce qui cloche).
 
 ## ⚠️ À savoir avant de lancer
 
@@ -64,8 +65,9 @@ généré et la sortie terminal :
 - Si `nom_client` / `type_client` / `lien_page_pro` sont vides : problème sur
   le listing, envoie-moi `debug_page1.html` ou `debug_page1.png`.
 - Si `adresse_postale` / `telephone` / `siret_ou_numero_site` /
-  `numero_carte_pro` / `nb_annonces_vente` / `nb_annonces_location` sont vides
-  ou faux : problème sur la fiche détail, envoie-moi `debug_detail.html`.
+  `nb_annonces_vente` / `nb_annonces_location` sont vides ou faux : problème
+  sur la fiche détail, envoie-moi `debug_detail.html` et la sortie terminal
+  (qui affiche le texte brut lu dans `#properties`).
 
 ## Lancement complet
 
@@ -81,7 +83,7 @@ python scrape_seloger.py \
 | --- | --- |
 | `--max-pages N` | Limite le nombre de pages d'annuaire parcourues |
 | `--limit N` | Limite le nombre total de clients extraits |
-| `--no-details` | N'ouvre pas la fiche détail de chaque client (plus rapide, mais adresse/téléphone/SIRET/carte pro/nb annonces vides) |
+| `--no-details` | N'ouvre pas la fiche détail de chaque client (plus rapide, mais adresse/téléphone/SIRET/nb annonces vides) |
 | `--headed` | Affiche le navigateur au lieu du mode headless |
 | `--min-delay` / `--max-delay` | Bornes (secondes) du délai aléatoire entre les pages/fiches |
 | `--dump-html PATH` | Sauvegarde le HTML de la page 1 du listing (debug) |

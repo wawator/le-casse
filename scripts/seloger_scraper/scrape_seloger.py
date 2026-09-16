@@ -94,20 +94,20 @@ PHONE_PATTERN = re.compile(r"(?:0|\+33\s?)[1-9](?:[\s.-]?\d{2}){4}")
 POSTAL_CODE_PATTERN = re.compile(r"\b\d{5}\b")
 SIRET_PATTERN = re.compile(r"\b\d{3}\s?\d{3}\s?\d{3}\s?\d{5}\b")  # 14 chiffres
 
-# SIRET / carte professionnelle / nb d'annonces : présents dans la popup
-# "Mentions légales" / "Détails et honoraires" de la fiche détail (confirmé
-# par l'utilisateur), pas dans le JSON __NEXT_DATA__. On les cherche dans le
-# texte de TOUTE la page (y compris contenu masqué par CSS avant clic), avec
-# en secours un clic sur la popup si rien n'est trouvé du premier coup.
+# SIRET : présent dans la popup "Mentions légales" / "Détails et honoraires"
+# de la fiche détail (confirmé par l'utilisateur), pas dans le JSON
+# __NEXT_DATA__. On le cherche dans le texte de TOUTE la page (y compris
+# contenu masqué par CSS avant clic), avec en secours un clic sur la popup
+# si rien n'est trouvé du premier coup.
 MODAL_TRIGGER_TEXTS = ["Détails et honoraires", "Mentions légales", "mentions légales", "détails et honoraires"]
-CARTE_PRO_LABELS = ["carte professionnelle", "n° de carte", "numéro de carte", "num de carte", "carte pro"]
-CARTE_PRO_PATTERN = re.compile(r"CPI\s*[\d\s]{8,30}", re.IGNORECASE)
 
 # Nombre d'annonces vente/location : XPath fourni par l'utilisateur sur la
-# fiche détail (le JSON du listing renvoie toujours 0, non fiable). Fenêtre de
-# proximité volontairement courte (quelques caractères) pour ne pas confondre
-# le compteur vente et le compteur location quand les deux libellés sont
-# proches dans le texte (ex: "En vente (24) En location (5)").
+# fiche détail (le JSON du listing renvoie toujours 0, non fiable).
+PROPERTIES_COUNT_XPATH = "xpath=//*[@id='properties']/div[2]"
+
+# Fenêtre de proximité volontairement courte (quelques caractères) pour ne
+# pas confondre le compteur vente et le compteur location quand les deux
+# libellés sont proches dans le texte (ex: "En vente (24) En location (5)").
 COUNT_KEYWORD_THEN_NUMBER = re.compile(r"(vente|location)\D{0,3}(\d[\d\s]{0,6})", re.IGNORECASE)
 COUNT_NUMBER_THEN_KEYWORD = re.compile(r"(\d[\d\s]{0,6})\s*annonces?\s*(?:en\s*)?(vente|location)", re.IGNORECASE)
 
@@ -141,7 +141,6 @@ CSV_FIELDNAMES = [
     "nb_annonces_location",
     "adresse_postale",
     "siret_ou_numero_site",
-    "numero_carte_pro",
     "telephone",
     "lien_page_pro",
     "site_web_pro",
@@ -156,7 +155,6 @@ class ClientRecord:
     nb_annonces_location: str = ""
     adresse_postale: str = ""
     siret_ou_numero_site: str = ""
-    numero_carte_pro: str = ""
     telephone: str = ""
     lien_page_pro: str = ""
     site_web_pro: str = ""
@@ -300,19 +298,6 @@ def html_to_text(raw_html: str) -> str:
     return re.sub(r"[ \t]+", " ", text)
 
 
-def extract_near_label(text: str, labels: list[str], chars_after: int = 60) -> str:
-    lowered = text.lower()
-    for label in labels:
-        idx = lowered.find(label.lower())
-        if idx == -1:
-            continue
-        snippet = text[idx + len(label) : idx + len(label) + chars_after]
-        m = re.search(r"[:\s]{1,5}([A-Za-z0-9][A-Za-z0-9\s.\-/]{3,40})", snippet)
-        if m:
-            return re.sub(r"\s+", " ", m.group(1)).strip()
-    return ""
-
-
 def parse_properties_counts(text: str) -> tuple[str, str]:
     counts = {"vente": "", "location": ""}
     # Priorité à la formulation explicite "X annonces en <mot-clé>", sans
@@ -331,18 +316,12 @@ def parse_properties_counts(text: str) -> tuple[str, str]:
     return counts["vente"], counts["location"]
 
 
-def extract_legal_fields_from_html(html: str) -> tuple[str, str]:
-    """Retourne (siret, numero_carte_pro) trouvés dans TOUT le texte de la page
-    (y compris contenu masqué par CSS, ex: popup Mentions légales fermée)."""
+def extract_siret_from_html(html: str) -> str:
+    """Cherche le SIRET dans TOUT le texte de la page (y compris contenu
+    masqué par CSS, ex: popup Mentions légales fermée)."""
     full_text = html_to_text(html)
     siret_match = SIRET_PATTERN.search(full_text)
-    siret = siret_match.group(0).replace(" ", "") if siret_match else ""
-    carte_match = CARTE_PRO_PATTERN.search(full_text)
-    if carte_match:
-        carte_pro = re.sub(r"\s+", " ", carte_match.group(0)).strip()
-    else:
-        carte_pro = extract_near_label(full_text, CARTE_PRO_LABELS)
-    return siret, carte_pro
+    return siret_match.group(0).replace(" ", "") if siret_match else ""
 
 
 def open_legal_mentions_popup(page: Page) -> bool:
@@ -364,24 +343,30 @@ def extract_properties_counts(page: Page) -> tuple[str, str]:
     renvoie toujours 0, non fiable."""
     try:
         locator = page.locator(PROPERTIES_COUNT_XPATH)
-        if locator.count() == 0:
+        count = locator.count()
+        if count == 0:
+            log("  #properties/div[2] introuvable sur cette fiche (0 élément).")
             return "", ""
         snippet = locator.first.inner_text(timeout=3000)
-    except Exception:
+    except Exception as exc:
+        log(f"  Échec lecture #properties/div[2]: {exc}")
         return "", ""
 
-    return parse_properties_counts(snippet)
+    log(f"  Texte brut de #properties/div[2]: {snippet[:200]!r}")
+    sale, rent = parse_properties_counts(snippet)
+    if not sale and not rent:
+        log("  Aucun nombre vente/location reconnu dans ce texte (regex à ajuster).")
+    return sale, rent
 
 
 def scrape_detail_page(
     page: Page, url: str, min_delay: float, max_delay: float, dump_detail_html_path: Path | None
 ) -> dict:
     """Visite la fiche annonceur pour compléter adresse / téléphone / SIRET /
-    numéro de carte pro / site web / nb d'annonces réel."""
+    site web / nb d'annonces réel."""
     extra = {
         "adresse_postale": "",
         "siret_ou_numero_site": "",
-        "numero_carte_pro": "",
         "site_web_pro": "",
         "telephone": "",
         "nb_annonces_vente": "",
@@ -407,17 +392,16 @@ def scrape_detail_page(
                 extra["site_web_pro"] = flat
                 break
 
-    # SIRET / carte pro : cherchés dans le HTML complet (contenu de la popup
-    # "Mentions légales" / "Détails et honoraires" possiblement masqué par CSS
-    # avant clic). Si rien trouvé, on tente d'ouvrir la popup et on réessaie.
-    siret, carte_pro = extract_legal_fields_from_html(html)
-    if not siret and not carte_pro:
+    # SIRET : cherché dans le HTML complet (contenu de la popup "Mentions
+    # légales" / "Détails et honoraires" possiblement masqué par CSS avant
+    # clic). Si rien trouvé, on tente d'ouvrir la popup et on réessaie.
+    siret = extract_siret_from_html(html)
+    if not siret:
         if open_legal_mentions_popup(page):
             html_after_click = page.content()
-            siret, carte_pro = extract_legal_fields_from_html(html_after_click)
+            siret = extract_siret_from_html(html_after_click)
             html = html_after_click  # pour le dump éventuel ci-dessous
     extra["siret_ou_numero_site"] = siret
-    extra["numero_carte_pro"] = carte_pro
 
     extra["nb_annonces_vente"], extra["nb_annonces_location"] = extract_properties_counts(page)
 
@@ -555,7 +539,6 @@ def run(
                         for field_name in (
                             "adresse_postale",
                             "siret_ou_numero_site",
-                            "numero_carte_pro",
                             "site_web_pro",
                             "telephone",
                             "nb_annonces_vente",
