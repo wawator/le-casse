@@ -6,18 +6,26 @@ Exporte en CSV, pour chaque client de l'annuaire :
   nom_client, type_client, nb_annonces_vente, nb_annonces_location,
   adresse_postale, siret_ou_numero_site, telephone, lien_page_pro, site_web_pro
 
-IMPORTANT — à lire avant de lancer :
-  - Ce script n'a PAS pu être testé contre le site réel (pas d'accès réseau
-    à seloger.com depuis l'environnement où il a été écrit). Les sélecteurs
-    CSS ci-dessous sont des points de départ raisonnables mais devront très
-    probablement être ajustés une fois que tu auras vu les erreurs / le HTML
-    réel. Utilise `--dump-html` pour sauvegarder une page et me l'envoyer,
-    ça ira plus vite que de deviner à l'aveugle.
+Comment ça marche :
+  Les pages de listing SeLoger (Next.js) embarquent un bloc JSON complet dans
+  <script id="__NEXT_DATA__">, avec la liste structurée des annonceurs
+  (nom, type, nb d'annonces vente/location, lien vers la fiche pro). On lit
+  ce JSON directement au lieu de parser le HTML visible — plus robuste face
+  aux changements de mise en page. La pagination se fait via `?page=N` dans
+  l'URL (confirmé sur un export réel du site). Les fiches individuelles
+  (`/professionnels-immobilier/<id>`) sont ensuite visitées pour compléter
+  adresse, téléphone, SIRET/n° de site et site web pro : leur structure JSON
+  n'a pas encore été vérifiée contre le site réel, donc une recherche
+  générique par nom de clé + un repli texte/regex servent de filet de
+  sécurité. Utilise `--dump-detail-html` sur un premier essai pour m'envoyer
+  un exemple si ces champs restent vides.
+
+IMPORTANT :
   - SeLoger a des CGU qui peuvent interdire le scraping automatisé et le site
     est protégé par un anti-bot (Datadome). Ce script scrape lentement avec
-    des délais aléatoires par défaut pour rester raisonnable — ne les réduis
-    pas de façon agressive. Un CAPTCHA qui apparaît régulièrement est un
-    signal pour ralentir encore, pas pour forcer.
+    des délais aléatoires par défaut — ne les réduis pas de façon agressive.
+    Un CAPTCHA qui apparaît régulièrement est un signal pour ralentir
+    encore, pas pour forcer.
   - Usage strictement pour un usage autorisé (étude de marché, prospection
     B2B sur des données professionnelles publiques). Ne pas redistribuer
     les données extraites en violation des CGU du site.
@@ -31,32 +39,29 @@ Usage :
         --url "https://www.seloger.com/annuaire/indre-et-loire-37/#intermediaryTypes=1" \
         --output indre_et_loire_37.csv
 
-    # Pour déboguer / m'envoyer un extrait de la page si le parsing échoue :
-    python scrape_seloger.py --url "..." --max-pages 1 --dump-html debug_page1.html --limit 5
+    # Pour déboguer une fiche détail si adresse/téléphone/SIRET restent vides :
+    python scrape_seloger.py --url "..." --limit 3 --dump-detail-html debug_detail.html
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import json
+import math
 import random
 import re
 import sys
 import time
 from dataclasses import dataclass, fields
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, urlencode, urljoin, urlsplit, urlunsplit
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError, sync_playwright
-
-# --------------------------------------------------------------------------
-# SÉLECTEURS / HEURISTIQUES — ZONE À AJUSTER EN PREMIER SI ÇA NE MARCHE PAS
-# --------------------------------------------------------------------------
 
 BASE_URL = "https://www.seloger.com"
 
 # Boutons de consentement cookies connus (Didomi et variantes génériques).
-# Le script clique sur le premier qui matche, s'il y en a un.
 COOKIE_CONSENT_SELECTORS = [
     "#didomi-notice-agree-button",
     "button#onetrust-accept-btn-handler",
@@ -65,49 +70,53 @@ COOKIE_CONSENT_SELECTORS = [
 ]
 COOKIE_CONSENT_TEXT_FALLBACKS = ["Tout accepter", "Accepter", "J'accepte", "OK pour moi"]
 
-# Liens de fiche annonceur individuelle : on cherche des <a> dont le href
-# contient "/annuaire/" et qui a plus de segments que la simple page de
-# listing (donc pointe vers une fiche précise). Ajuste ce pattern si les
-# URLs réelles ont une autre forme (ex: /pro/, /agence/, etc.)
-DETAIL_LINK_HREF_PATTERN = re.compile(r"/annuaire/[^/#?]+/[^/#?]+")
+NEXT_DATA_PATTERN = re.compile(
+    r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.DOTALL
+)
 
-# Nombre de niveaux de parents à remonter depuis le lien de fiche pour
-# atteindre le conteneur de la "carte" annonceur (à ajuster : si les champs
-# extraits sont vides ou faux, essaie 2, 3, 4...)
-CARD_ANCESTOR_LEVELS = 3
+# intermediaryType observé = 1 pour "Agence immobilière" (filtre par défaut de
+# l'URL fournie). Ordre des autres valeurs deviné depuis le menu déroulant du
+# site (Agence immobilière / Agent commercial / Notaire / Constructeur /
+# Promoteur) mais PAS vérifié un par un : si un type inattendu sort, le script
+# affiche "Type <code>" plutôt qu'une étiquette fausse.
+INTERMEDIARY_TYPE_LABELS = {
+    1: "Agence immobilière",
+    2: "Agent commercial",
+    3: "Notaire",
+    4: "Constructeur",
+    5: "Promoteur",
+}
 
-# Sélecteurs candidats pour le bouton "page suivante" de la pagination.
-NEXT_PAGE_SELECTORS = [
-    "a[rel='next']",
-    "button[aria-label*='page suivante' i]",
-    "a[aria-label*='page suivante' i]",
-    "button[aria-label*='Suivant' i]",
-    "a[aria-label*='Suivant' i]",
-]
-NEXT_PAGE_TEXT_FALLBACKS = ["Suivant", "Page suivante", ">"]
-
-# Mots-clés utilisés pour deviner le "type de client" dans le texte d'une carte.
-CLIENT_TYPE_KEYWORDS = [
-    "Agence indépendante",
-    "Réseau national",
-    "Réseau",
-    "Agence immobilière",
-    "Agence",
-    "Promoteur",
-    "Notaire",
-    "Administrateur de biens",
-    "Chasseur immobilier",
-    "Particulier",
-]
-
+# --- Filet de sécurité texte/regex pour les fiches détail (structure JSON
+# de ces pages pas encore vérifiée contre le site réel) ---
 PHONE_PATTERN = re.compile(r"(?:0|\+33\s?)[1-9](?:[\s.-]?\d{2}){4}")
 POSTAL_CODE_PATTERN = re.compile(r"\b\d{5}\b")
 SIRET_PATTERN = re.compile(r"\b\d{3}\s?\d{3}\s?\d{3}\s?\d{5}\b")  # 14 chiffres
 SITE_ID_LABELS = ["siret", "n° de site", "numéro de site", "num de site", "id annonceur"]
-SALE_COUNT_PATTERN = re.compile(r"(\d[\d\s]*)\s*annonces?\s*(?:en\s*)?vente", re.IGNORECASE)
-RENT_COUNT_PATTERN = re.compile(r"(\d[\d\s]*)\s*annonces?\s*(?:en\s*)?location", re.IGNORECASE)
 
-REVEAL_PHONE_TEXT_CANDIDATES = ["Voir le numéro", "Afficher le numéro", "Voir le téléphone"]
+# Clés JSON candidates (recherche récursive, insensible à la casse, par
+# sous-chaîne) pour les champs de la fiche détail.
+ADDRESS_KEY_HINTS = ["address", "adresse"]
+PHONE_KEY_HINTS = ["phone", "telephone", "tel"]
+WEBSITE_KEY_HINTS = ["website", "siteweb", "webSite", "siteinternet"]
+SIRET_KEY_HINTS = ["siret", "siren", "registrationnumber", "numerosite", "numsite"]
+
+EXCLUDED_LINK_DOMAINS = [
+    "seloger.com",
+    "adevinta",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+    "linkedin.com",
+    "youtube.com",
+    "tiktok.com",
+    "google.com",
+    "googleapis.com",
+    "doubleclick.net",
+    "apple.com",
+    "play.google.com",
+]
 
 CSV_FIELDNAMES = [
     "nom_client",
@@ -151,8 +160,6 @@ def dismiss_cookie_banner(page: Page) -> None:
                 locator.first.click(timeout=2000)
                 log("Bandeau cookies fermé via sélecteur CSS.")
                 return
-        except PlaywrightTimeoutError:
-            continue
         except Exception:
             continue
 
@@ -169,7 +176,101 @@ def dismiss_cookie_banner(page: Page) -> None:
     log("Pas de bandeau cookies détecté (ou déjà fermé).")
 
 
-def extract_labeled_value(text_lines: list[str], labels: list[str]) -> str:
+def build_page_url(start_url: str, page_num: int) -> str:
+    parts = urlsplit(start_url)
+    query = parse_qs(parts.query)
+    query["page"] = [str(page_num)]
+    new_query = urlencode(query, doseq=True)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
+
+
+def extract_next_data(html: str) -> dict | None:
+    m = NEXT_DATA_PATTERN.search(html)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(1))
+    except json.JSONDecodeError as exc:
+        log(f"  __NEXT_DATA__ trouvé mais JSON invalide: {exc}")
+        return None
+
+
+def get_search_results(next_data: dict) -> dict | None:
+    try:
+        return next_data["props"]["pageProps"]["initialState"]["search"]["results"]
+    except (KeyError, TypeError):
+        return None
+
+
+def label_for_intermediary_type(code) -> str:
+    if code is None:
+        return ""
+    if isinstance(code, int) and code in INTERMEDIARY_TYPE_LABELS:
+        return INTERMEDIARY_TYPE_LABELS[code]
+    return f"Type {code}"
+
+
+def record_from_intermediary(item: dict) -> ClientRecord:
+    record = ClientRecord()
+    record.nom_client = item.get("name", "") or ""
+    record.type_client = label_for_intermediary_type(item.get("intermediaryType"))
+
+    properties = item.get("properties") or {}
+    record.nb_annonces_vente = str(properties.get("sellCount", "")) if properties.get("sellCount") is not None else ""
+    record.nb_annonces_location = str(properties.get("rentCount", "")) if properties.get("rentCount") is not None else ""
+
+    detail_url = item.get("url") or ""
+    record.lien_page_pro = urljoin(BASE_URL, detail_url) if detail_url else ""
+
+    return record
+
+
+def find_values_by_key_hints(obj, hints: list[str], _seen: set | None = None) -> list[tuple[str, object]]:
+    """Recherche récursive de (clé, valeur) dont la clé contient un des `hints` (insensible à la casse)."""
+    results: list[tuple[str, object]] = []
+    if _seen is None:
+        _seen = set()
+
+    if isinstance(obj, dict):
+        obj_id = id(obj)
+        if obj_id in _seen:
+            return results
+        _seen.add(obj_id)
+        for k, v in obj.items():
+            kl = k.lower()
+            if any(h.lower() in kl for h in hints):
+                results.append((k, v))
+            results.extend(find_values_by_key_hints(v, hints, _seen))
+    elif isinstance(obj, list):
+        for item in obj:
+            results.extend(find_values_by_key_hints(item, hints, _seen))
+
+    return results
+
+
+def flatten_scalar(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float)):
+        return str(value).strip()
+    if isinstance(value, dict):
+        parts = [flatten_scalar(v) for v in value.values()]
+        return " ".join(p for p in parts if p)
+    if isinstance(value, list):
+        parts = [flatten_scalar(v) for v in value]
+        return " ".join(p for p in parts if p)
+    return ""
+
+
+def first_non_empty(pairs: list[tuple[str, object]]) -> str:
+    for _, value in pairs:
+        flat = flatten_scalar(value)
+        if flat:
+            return flat
+    return ""
+
+
+def extract_labeled_value_from_text(text_lines: list[str], labels: list[str]) -> str:
     for i, line in enumerate(text_lines):
         lowered = line.lower()
         for label in labels:
@@ -182,99 +283,11 @@ def extract_labeled_value(text_lines: list[str], labels: list[str]) -> str:
     return ""
 
 
-def parse_card_text(card_text: str, detail_href: str) -> ClientRecord:
-    record = ClientRecord()
-    lines = [l.strip() for l in card_text.splitlines() if l.strip()]
-
-    record.nom_client = lines[0] if lines else ""
-
-    for keyword in CLIENT_TYPE_KEYWORDS:
-        if keyword.lower() in card_text.lower():
-            record.type_client = keyword
-            break
-
-    sale_match = SALE_COUNT_PATTERN.search(card_text)
-    if sale_match:
-        record.nb_annonces_vente = sale_match.group(1).replace(" ", "")
-
-    rent_match = RENT_COUNT_PATTERN.search(card_text)
-    if rent_match:
-        record.nb_annonces_location = rent_match.group(1).replace(" ", "")
-
-    for line in lines:
-        if POSTAL_CODE_PATTERN.search(line) and len(line) < 120:
-            record.adresse_postale = line
-            break
-
-    siret_match = SIRET_PATTERN.search(card_text)
-    if siret_match:
-        record.siret_ou_numero_site = siret_match.group(0).replace(" ", "")
-    else:
-        record.siret_ou_numero_site = extract_labeled_value(lines, SITE_ID_LABELS)
-
-    phone_match = PHONE_PATTERN.search(card_text)
-    if phone_match:
-        record.telephone = phone_match.group(0)
-
-    record.lien_page_pro = urljoin(BASE_URL, detail_href) if detail_href else ""
-
-    return record
-
-
-def find_result_cards(page: Page) -> list[tuple[str, str]]:
-    """Retourne une liste de (texte_de_la_carte, href_fiche) dédupliquée par href."""
-    anchors = page.locator("a[href*='/annuaire/']")
-    count = anchors.count()
-    seen_hrefs: set[str] = set()
-    results: list[tuple[str, str]] = []
-
-    for i in range(count):
-        anchor = anchors.nth(i)
-        try:
-            href = anchor.get_attribute("href") or ""
-        except Exception:
-            continue
-        if not href or not DETAIL_LINK_HREF_PATTERN.search(href):
-            continue
-        if href in seen_hrefs:
-            continue
-
-        card_handle = anchor
-        try:
-            for _ in range(CARD_ANCESTOR_LEVELS):
-                parent = card_handle.locator("xpath=..")
-                if parent.count() == 0:
-                    break
-                card_handle = parent
-            card_text = card_handle.inner_text(timeout=2000)
-        except Exception:
-            try:
-                card_text = anchor.inner_text(timeout=2000)
-            except Exception:
-                card_text = ""
-
-        seen_hrefs.add(href)
-        results.append((card_text, href))
-
-    return results
-
-
-def reveal_and_extract_phone(page: Page, card_link_href: str) -> str:
-    """Certaines fiches masquent le téléphone derrière un clic. Best-effort."""
-    for text in REVEAL_PHONE_TEXT_CANDIDATES:
-        try:
-            button = page.get_by_text(text, exact=False)
-            if button.count() > 0:
-                button.first.click(timeout=2000)
-                page.wait_for_timeout(500)
-        except Exception:
-            continue
-    return ""
-
-
-def scrape_detail_page(page: Page, url: str, min_delay: float, max_delay: float) -> dict:
-    """Visite la fiche annonceur pour compléter SIRET / site web / adresse si absents."""
-    extra: dict[str, str] = {"siret_ou_numero_site": "", "site_web_pro": "", "telephone": ""}
+def scrape_detail_page(
+    page: Page, url: str, min_delay: float, max_delay: float, dump_detail_html_path: Path | None
+) -> dict:
+    """Visite la fiche annonceur pour compléter adresse / téléphone / SIRET / site web."""
+    extra = {"adresse_postale": "", "siret_ou_numero_site": "", "site_web_pro": "", "telephone": ""}
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=30000)
     except PlaywrightTimeoutError:
@@ -283,60 +296,64 @@ def scrape_detail_page(page: Page, url: str, min_delay: float, max_delay: float)
 
     polite_wait(min_delay, max_delay)
 
-    try:
-        body_text = page.locator("body").inner_text(timeout=3000)
-    except Exception:
-        body_text = ""
+    html = page.content()
 
-    lines = [l.strip() for l in body_text.splitlines() if l.strip()]
+    if dump_detail_html_path is not None:
+        dump_detail_html_path.write_text(html, encoding="utf-8")
+        log(f"  HTML de la fiche détail sauvegardé dans {dump_detail_html_path}")
 
-    siret_match = SIRET_PATTERN.search(body_text)
-    if siret_match:
-        extra["siret_ou_numero_site"] = siret_match.group(0).replace(" ", "")
-    else:
-        extra["siret_ou_numero_site"] = extract_labeled_value(lines, SITE_ID_LABELS)
-
-    phone_match = PHONE_PATTERN.search(body_text)
-    if phone_match:
-        extra["telephone"] = phone_match.group(0)
-
-    # Site web pro : un lien externe qui ne pointe pas vers seloger.com,
-    # généralement situé près d'un label "Site internet" / "Site web".
-    try:
-        external_links = page.locator("a[href^='http']")
-        for i in range(external_links.count()):
-            href = external_links.nth(i).get_attribute("href") or ""
-            if href and "seloger.com" not in href and "adevinta" not in href:
-                extra["site_web_pro"] = href
+    next_data = extract_next_data(html)
+    if next_data is not None:
+        extra["adresse_postale"] = first_non_empty(find_values_by_key_hints(next_data, ADDRESS_KEY_HINTS))
+        extra["telephone"] = first_non_empty(find_values_by_key_hints(next_data, PHONE_KEY_HINTS))
+        extra["siret_ou_numero_site"] = first_non_empty(find_values_by_key_hints(next_data, SIRET_KEY_HINTS))
+        for _, value in find_values_by_key_hints(next_data, WEBSITE_KEY_HINTS):
+            flat = flatten_scalar(value)
+            if flat.startswith("http") and not any(d in flat for d in EXCLUDED_LINK_DOMAINS):
+                extra["site_web_pro"] = flat
                 break
-    except Exception:
-        pass
+
+    # Filet de sécurité texte/regex si le JSON n'a rien donné.
+    if not any(extra.values()):
+        try:
+            body_text = page.locator("body").inner_text(timeout=3000)
+        except Exception:
+            body_text = ""
+        lines = [l.strip() for l in body_text.splitlines() if l.strip()]
+
+        if not extra["siret_ou_numero_site"]:
+            siret_match = SIRET_PATTERN.search(body_text)
+            extra["siret_ou_numero_site"] = (
+                siret_match.group(0).replace(" ", "") if siret_match else extract_labeled_value_from_text(lines, SITE_ID_LABELS)
+            )
+        if not extra["telephone"]:
+            phone_match = PHONE_PATTERN.search(body_text)
+            if phone_match:
+                extra["telephone"] = phone_match.group(0)
+        if not extra["adresse_postale"]:
+            for line in lines:
+                if POSTAL_CODE_PATTERN.search(line) and len(line) < 120:
+                    extra["adresse_postale"] = line
+                    break
+
+    if not extra["site_web_pro"]:
+        try:
+            external_links = page.locator("a[href^='http']")
+            for i in range(external_links.count()):
+                href = external_links.nth(i).get_attribute("href") or ""
+                if href and not any(d in href for d in EXCLUDED_LINK_DOMAINS):
+                    extra["site_web_pro"] = href
+                    break
+        except Exception:
+            pass
 
     return extra
 
 
-def go_to_next_page(page: Page) -> bool:
-    for selector in NEXT_PAGE_SELECTORS:
-        try:
-            locator = page.locator(selector)
-            if locator.count() > 0 and locator.first.is_visible() and locator.first.is_enabled():
-                locator.first.click(timeout=3000)
-                return True
-        except Exception:
-            continue
-
-    for text in NEXT_PAGE_TEXT_FALLBACKS:
-        try:
-            locator = page.get_by_role("link", name=text, exact=False)
-            if locator.count() == 0:
-                locator = page.get_by_role("button", name=text, exact=False)
-            if locator.count() > 0 and locator.first.is_visible():
-                locator.first.click(timeout=3000)
-                return True
-        except Exception:
-            continue
-
-    return False
+def fetch_listing_page(page: Page, url: str) -> tuple[dict | None, str]:
+    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    html = page.content()
+    return extract_next_data(html), html
 
 
 def run(
@@ -350,9 +367,9 @@ def run(
     max_delay: float,
     dump_html_path: Path | None,
     screenshot_path: Path | None,
+    dump_detail_html_path: Path | None,
 ) -> None:
     all_records: list[ClientRecord] = []
-    seen_hrefs: set[str] = set()
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
@@ -372,90 +389,98 @@ def run(
         dismiss_cookie_banner(page)
         polite_wait(1.0, 2.0)
 
+        first_url = build_page_url(start_url, 1)
+        log(f"Chargement page 1: {first_url}")
+        next_data, html = fetch_listing_page(page, first_url)
+
+        if dump_html_path is not None:
+            dump_html_path.write_text(html, encoding="utf-8")
+            log(f"HTML sauvegardé dans {dump_html_path}")
+        if screenshot_path is not None:
+            try:
+                page.screenshot(path=str(screenshot_path), full_page=True, timeout=10000)
+                log(f"Capture d'écran sauvegardée dans {screenshot_path}")
+            except Exception as exc:
+                log(f"Échec de la capture d'écran: {exc}")
+
+        if next_data is None:
+            log("ERREUR: bloc __NEXT_DATA__ introuvable ou invalide sur la page 1. "
+                "Le site a peut-être changé de structure, ou une page de blocage/CAPTCHA "
+                "a été servie. Vérifie le HTML/la capture d'écran sauvegardés.")
+            browser.close()
+            write_csv(all_records, output_path)
+            return
+
+        results = get_search_results(next_data)
+        if results is None:
+            log("ERREUR: __NEXT_DATA__ trouvé mais la structure attendue "
+                "(props.pageProps.initialState.search.results) est absente. "
+                "Le site a probablement changé — envoie-moi le HTML sauvegardé pour ajuster.")
+            browser.close()
+            write_csv(all_records, output_path)
+            return
+
+        total_count = results.get("intermediariesCount", 0)
+        first_batch = results.get("intermediaries", [])
+        page_size = len(first_batch) or 1
+        total_pages = max(1, math.ceil(total_count / page_size))
+        log(f"{total_count} client(s) au total, {page_size} par page => {total_pages} page(s).")
+
+        if max_pages is not None:
+            total_pages = min(total_pages, max_pages)
+
         page_num = 1
-        previous_href_set: frozenset[str] | None = None
+        batch = first_batch
 
         while True:
-            log(f"--- Page {page_num} ---")
+            log(f"--- Page {page_num}/{total_pages}: {len(batch)} client(s) ---")
 
-            try:
-                page_title = page.title()
-            except Exception:
-                page_title = "<inconnu>"
-            try:
-                body_snippet = re.sub(r"\s+", " ", page.locator("body").inner_text(timeout=3000)).strip()[:300]
-            except Exception:
-                body_snippet = "<impossible de lire le body>"
-            log(f"Titre de la page: {page_title!r}")
-            log(f"Début du texte visible: {body_snippet!r}")
-
-            if dump_html_path is not None:
-                html = page.content()
-                dump_file = dump_html_path if page_num == 1 else dump_html_path.with_name(
-                    f"{dump_html_path.stem}_p{page_num}{dump_html_path.suffix}"
-                )
-                dump_file.write_text(html, encoding="utf-8")
-                log(f"HTML sauvegardé dans {dump_file}")
-
-            if screenshot_path is not None:
-                shot_file = screenshot_path if page_num == 1 else screenshot_path.with_name(
-                    f"{screenshot_path.stem}_p{page_num}{screenshot_path.suffix}"
-                )
-                try:
-                    page.screenshot(path=str(shot_file), full_page=True, timeout=10000)
-                    log(f"Capture d'écran sauvegardée dans {shot_file}")
-                except Exception as exc:
-                    log(f"Échec de la capture d'écran: {exc}")
-
-            cards = find_result_cards(page)
-            log(f"{len(cards)} carte(s) détectée(s) sur cette page.")
-
-            current_href_set = frozenset(href for _, href in cards)
-            if previous_href_set is not None and current_href_set == previous_href_set:
-                log("Même contenu que la page précédente : arrêt (pagination cassée ou fin).")
-                break
-            previous_href_set = current_href_set
-
-            for card_text, href in cards:
-                if href in seen_hrefs:
-                    continue
-                seen_hrefs.add(href)
-
-                record = parse_card_text(card_text, href)
+            for item in batch:
+                record = record_from_intermediary(item)
 
                 if with_details and record.lien_page_pro:
                     detail_page = context.new_page()
                     try:
-                        extra = scrape_detail_page(detail_page, record.lien_page_pro, min_delay, max_delay)
-                        if extra.get("siret_ou_numero_site"):
-                            record.siret_ou_numero_site = extra["siret_ou_numero_site"]
-                        if extra.get("site_web_pro"):
-                            record.site_web_pro = extra["site_web_pro"]
-                        if extra.get("telephone") and not record.telephone:
+                        this_dump_path = (
+                            dump_detail_html_path if (dump_detail_html_path and len(all_records) == 0) else None
+                        )
+                        extra = scrape_detail_page(detail_page, record.lien_page_pro, min_delay, max_delay, this_dump_path)
+                        for field_name in ("adresse_postale", "siret_ou_numero_site", "site_web_pro"):
+                            if extra.get(field_name):
+                                setattr(record, field_name, extra[field_name])
+                        if extra.get("telephone"):
                             record.telephone = extra["telephone"]
                     finally:
                         detail_page.close()
 
                 all_records.append(record)
-                log(f"  + {record.nom_client!r}")
+                log(f"  + {record.nom_client!r} (vente={record.nb_annonces_vente}, location={record.nb_annonces_location})")
 
                 if limit is not None and len(all_records) >= limit:
                     log(f"Limite de {limit} client(s) atteinte, arrêt.")
-                    write_csv(all_records, output_path)
                     browser.close()
+                    write_csv(all_records, output_path)
                     return
 
-            if max_pages is not None and page_num >= max_pages:
-                log(f"Nombre max de pages ({max_pages}) atteint.")
-                break
-
-            polite_wait(min_delay, max_delay)
-            if not go_to_next_page(page):
-                log("Pas de page suivante trouvée : fin de la pagination.")
+            if page_num >= total_pages:
                 break
 
             page_num += 1
-            polite_wait(1.0, 2.0)
+            polite_wait(min_delay, max_delay)
+            page_url = build_page_url(start_url, page_num)
+            log(f"Chargement page {page_num}: {page_url}")
+            next_data, _ = fetch_listing_page(page, page_url)
+            if next_data is None:
+                log(f"Page {page_num}: __NEXT_DATA__ introuvable, arrêt de la pagination.")
+                break
+            results = get_search_results(next_data)
+            if results is None:
+                log(f"Page {page_num}: structure JSON inattendue, arrêt de la pagination.")
+                break
+            batch = results.get("intermediaries", [])
+            if not batch:
+                log(f"Page {page_num}: aucun client retourné, arrêt de la pagination.")
+                break
 
         browser.close()
 
@@ -484,7 +509,7 @@ def main() -> None:
     parser.add_argument(
         "--no-details",
         action="store_true",
-        help="Ne pas visiter la fiche détail de chaque client (plus rapide, moins de champs remplis).",
+        help="Ne pas visiter la fiche détail de chaque client (plus rapide : nom/type/nb annonces/lien seulement).",
     )
     parser.add_argument("--headed", action="store_true", help="Affiche le navigateur (par défaut: headless).")
     parser.add_argument("--min-delay", type=float, default=3.0, help="Délai minimum (s) entre les actions réseau.")
@@ -492,12 +517,17 @@ def main() -> None:
     parser.add_argument(
         "--dump-html",
         default=None,
-        help="Sauvegarde le HTML de chaque page listée dans ce fichier (utile pour debug/ajuster les sélecteurs).",
+        help="Sauvegarde le HTML de la page 1 du listing (debug).",
     )
     parser.add_argument(
         "--screenshot",
         default=None,
-        help="Sauvegarde une capture d'écran (PNG) de chaque page listée (utile pour debug visuel).",
+        help="Sauvegarde une capture d'écran (PNG) de la page 1 du listing (debug).",
+    )
+    parser.add_argument(
+        "--dump-detail-html",
+        default=None,
+        help="Sauvegarde le HTML de la toute première fiche détail visitée (debug adresse/téléphone/SIRET/site web).",
     )
 
     args = parser.parse_args()
@@ -513,6 +543,7 @@ def main() -> None:
         max_delay=args.max_delay,
         dump_html_path=Path(args.dump_html) if args.dump_html else None,
         screenshot_path=Path(args.screenshot) if args.screenshot else None,
+        dump_detail_html_path=Path(args.dump_detail_html) if args.dump_detail_html else None,
     )
 
 
