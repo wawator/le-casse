@@ -17,6 +17,12 @@ dist-ssr
 supabase/.branches
 supabase/.temp
 
+# Python
+__pycache__/
+*.pyc
+venv/
+*.csv
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
