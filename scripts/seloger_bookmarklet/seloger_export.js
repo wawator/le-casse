@@ -178,7 +178,12 @@
         }
       }
     }
-    return best;
+    if (!best) return null;
+    // Le texte matché peut être porté par un <span>/<div> décoratif à
+    // l'intérieur du vrai bouton/lien cliquable : on remonte au premier
+    // ancestor interactif pour cliquer le bon élément.
+    var interactive = best.closest('button, a, [role="button"], [tabindex]');
+    return interactive || best;
   }
 
   function simulateClick(el) {
@@ -201,19 +206,22 @@
       log('    SIRET : bouton "Détails et honoraires" / "Mentions légales" introuvable sur cette fiche.');
       return '';
     }
+    log('    SIRET : clic sur <' + trigger.tagName.toLowerCase() + '> "' + trigger.textContent.trim().slice(0, 40) + '"');
     simulateClick(trigger);
-    await sleep(1200);
+    await sleep(2000);
 
-    var dialog = doc.querySelector('[role="dialog"]');
+    var afterText = doc.body ? doc.body.innerText : '';
+    log('    SIRET : texte de la page ' + beforeText.length + ' -> ' + afterText.length + ' caractères après clic.');
+
+    var dialog = doc.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"]');
     if (dialog) {
       var m = SIRET_PATTERN.exec(dialog.innerText || '');
       if (m) return m[0].replace(/\s/g, '');
       log('    SIRET : popup ouverte mais aucun numéro à 14 chiffres dedans.');
     } else {
-      log('    SIRET : bouton cliqué mais aucune popup (role=dialog) détectée ensuite.');
+      log('    SIRET : bouton cliqué mais aucune popup (dialog/alertdialog/aria-modal) détectée ensuite.');
     }
 
-    var afterText = doc.body ? doc.body.innerText : '';
     var beforeMatches = new Set();
     var reBefore = new RegExp(SIRET_PATTERN.source, 'g');
     var mm;
