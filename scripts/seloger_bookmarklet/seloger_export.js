@@ -167,6 +167,11 @@
   }
 
   function findTrigger(doc, texts) {
+    // Identifiant stable confirmé sur une vraie fiche (data-testid="imprint-link").
+    var byTestId = doc.querySelector('[data-testid="imprint-link"]');
+    if (byTestId) return byTestId;
+
+    // Repli par texte si SeLoger change ce testid un jour.
     var all = doc.querySelectorAll('button, a, span, div, p');
     var candidates = [];
     for (var i = 0; i < all.length; i++) {
@@ -178,9 +183,6 @@
       }
     }
     if (!candidates.length) return null;
-    // Si le site a un doublon caché par media query (souvent le cas pour un
-    // menu mobile/desktop), on préfère un élément réellement rendu
-    // (offsetParent non nul) à un doublon display:none.
     var visible = candidates.filter(function (el) { return el.offsetParent !== null; });
     var pool = visible.length ? visible : candidates;
     pool.sort(function (a, b) { return a.textContent.trim().length - b.textContent.trim().length; });
@@ -189,45 +191,102 @@
     return interactive || best;
   }
 
-  function simulateClick(el) {
-    var view = (el.ownerDocument && el.ownerDocument.defaultView) || window;
-    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function (type) {
-      try {
-        var isPointer = type.indexOf('pointer') === 0;
-        var Ctor = (isPointer && view.PointerEvent) ? view.PointerEvent : view.MouseEvent;
-        var ev = new Ctor(type, { bubbles: true, cancelable: true, composed: true, view: view, button: 0 });
-        el.dispatchEvent(ev);
-      } catch (e) { /* ignore */ }
+  // Les composants react-aria (confirmé ici : data-react-aria-pressable="true")
+  // gèrent l'ouverture via leur propre système "press", pas un simple
+  // écouteur click. Des événements DOM simulés (même pointerdown/pointerup)
+  // n'ont montré aucun effet observable en pratique. On appelle donc
+  // directement le handler React attaché au nœud DOM — React stocke les
+  // props (dont onClick/onPress) sur l'élément sous une clé
+  // "__reactProps$..." ou "__reactEventHandlers$...", accessible sans
+  // passer par le système d'événements du navigateur.
+  function getReactProps(el) {
+    var keys = Object.keys(el);
+    for (var i = 0; i < keys.length; i++) {
+      if (/^__reactProps\$/.test(keys[i]) || /^__reactEventHandlers\$/.test(keys[i])) {
+        return el[keys[i]];
+      }
+    }
+    return null;
+  }
+
+  function invokeReactHandler(el, log) {
+    var props = getReactProps(el);
+    if (!props) {
+      log('    SIRET : aucune prop React trouvée sur le bouton (clé __reactProps$ absente).');
+      return false;
+    }
+    var fakeEvent = {
+      currentTarget: el, target: el, type: 'click', bubbles: true, cancelable: true,
+      defaultPrevented: false, isDefaultPrevented: function () { return false; },
+      isPropagationStopped: function () { return false; },
+      preventDefault: function () {}, stopPropagation: function () {}, persist: function () {}
+    };
+    if (typeof props.onPress === 'function') { props.onPress(fakeEvent); return true; }
+    if (typeof props.onClick === 'function') { props.onClick(fakeEvent); return true; }
+    if (typeof props.onPressStart === 'function' || typeof props.onPressEnd === 'function') {
+      if (props.onPressStart) props.onPressStart(fakeEvent);
+      if (props.onPressEnd) props.onPressEnd(fakeEvent);
+      return true;
+    }
+    log('    SIRET : props React trouvées mais aucun handler onPress/onClick dedans.');
+    return false;
+  }
+
+  function dispatchPointerSequence(el) {
+    return new Promise(function (resolve) {
+      var view = (el.ownerDocument && el.ownerDocument.defaultView) || window;
+      var rect = el.getBoundingClientRect();
+      var cx = rect.left + rect.width / 2;
+      var cy = rect.top + rect.height / 2;
+      var base = {
+        bubbles: true, cancelable: true, composed: true, view: view, button: 0,
+        clientX: cx, clientY: cy, pointerId: 1, pointerType: 'mouse', isPrimary: true
+      };
+      function fire(type, useMouse) {
+        try {
+          var Ctor = (!useMouse && view.PointerEvent) ? view.PointerEvent : view.MouseEvent;
+          el.dispatchEvent(new Ctor(type, base));
+        } catch (e) { /* ignore */ }
+      }
+      fire('pointerdown', false);
+      fire('mousedown', true);
+      setTimeout(function () {
+        fire('pointerup', false);
+        fire('mouseup', true);
+        fire('click', true);
+        try { el.click(); } catch (e) { /* ignore */ }
+        resolve();
+      }, 80);
     });
-    try { el.click(); } catch (e) { /* ignore */ }
   }
 
   async function extractSiretFromIframe(doc, log) {
     var beforeText = doc.body ? doc.body.innerText : '';
     var trigger = findTrigger(doc, MODAL_TRIGGER_TEXTS);
     if (!trigger) {
-      log('    SIRET : bouton "Détails et honoraires" / "Mentions légales" introuvable.');
+      log('    SIRET : bouton "Détails et honoraires" introuvable (ni par data-testid, ni par texte).');
       return '';
     }
-    var visible = trigger.offsetParent !== null;
-    log('    SIRET : clic sur <' + trigger.tagName.toLowerCase() + '> visible=' + visible +
-      ' texte="' + trigger.textContent.trim().slice(0, 40) + '"');
-    if (!visible) {
-      log('    SIRET : élément non rendu (offsetParent=null) — probablement caché par une media query, clic sans effet attendu.');
+    log('    SIRET : cible <' + trigger.tagName.toLowerCase() + '> texte="' + trigger.textContent.trim().slice(0, 40) + '"');
+
+    var invoked = invokeReactHandler(trigger, log);
+    log('    SIRET : invocation directe du handler React ' + (invoked ? 'réussie' : 'impossible'));
+    if (!invoked) {
+      await dispatchPointerSequence(trigger);
+      log('    SIRET : repli sur séquence d\'événements pointer/souris simulés.');
     }
-    simulateClick(trigger);
     await sleep(2000);
 
     var afterText = doc.body ? doc.body.innerText : '';
     log('    SIRET : texte de la page ' + beforeText.length + ' -> ' + afterText.length + ' caractères après clic.');
 
-    var dialog = doc.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"]');
+    var dialog = doc.querySelector('[data-testid="french-legal-info-modal"], [role="dialog"], [role="alertdialog"], [aria-modal="true"]');
     if (dialog) {
       var m = SIRET_PATTERN.exec(dialog.innerText || '');
       if (m) return m[0].replace(/\s/g, '');
       log('    SIRET : popup ouverte mais aucun numéro à 14 chiffres dedans.');
     } else {
-      log('    SIRET : bouton cliqué mais aucune popup (dialog/alertdialog/aria-modal) détectée ensuite.');
+      log('    SIRET : toujours aucune popup détectée ensuite.');
     }
 
     var beforeMatches = new Set();
