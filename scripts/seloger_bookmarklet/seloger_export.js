@@ -260,6 +260,33 @@
     });
   }
 
+  // Activation clavier (focus + touche Entrée) : les composants accessibles
+  // (react-aria en particulier) DOIVENT gérer correctement l'activation au
+  // clavier pour les utilisateurs qui ne cliquent pas à la souris — c'est un
+  // chemin de code différent de celui du clic, testé indépendamment, et
+  // potentiellement plus simple/direct en interne que la mécanique "press"
+  // liée au pointeur.
+  function dispatchKeyboardActivation(el) {
+    return new Promise(function (resolve) {
+      var view = (el.ownerDocument && el.ownerDocument.defaultView) || window;
+      try { el.focus(); } catch (e) { /* ignore */ }
+      function fireKey(type) {
+        try {
+          var ev = new view.KeyboardEvent(type, {
+            key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
+            bubbles: true, cancelable: true, composed: true, view: view
+          });
+          el.dispatchEvent(ev);
+        } catch (e) { /* ignore */ }
+      }
+      fireKey('keydown');
+      setTimeout(function () {
+        fireKey('keyup');
+        resolve();
+      }, 50);
+    });
+  }
+
   async function extractSiretFromIframe(doc, log) {
     var beforeText = doc.body ? doc.body.innerText : '';
     var trigger = findTrigger(doc, MODAL_TRIGGER_TEXTS);
@@ -269,24 +296,31 @@
     }
     log('    SIRET : cible <' + trigger.tagName.toLowerCase() + '> texte="' + trigger.textContent.trim().slice(0, 40) + '"');
 
-    var invoked = invokeReactHandler(trigger, log);
-    log('    SIRET : invocation directe du handler React ' + (invoked ? 'réussie' : 'impossible'));
-    if (!invoked) {
-      await dispatchPointerSequence(trigger);
-      log('    SIRET : repli sur séquence d\'événements pointer/souris simulés.');
+    function findDialog() {
+      return doc.querySelector('[data-testid="french-legal-info-modal"], [role="dialog"], [role="alertdialog"], [aria-modal="true"]');
     }
-    await sleep(2000);
+
+    await dispatchKeyboardActivation(trigger);
+    await sleep(1200);
+    if (!findDialog()) {
+      var invoked = invokeReactHandler(trigger, log);
+      if (invoked) await sleep(1200);
+      if (!invoked || !findDialog()) {
+        await dispatchPointerSequence(trigger);
+        await sleep(1200);
+      }
+    }
 
     var afterText = doc.body ? doc.body.innerText : '';
-    log('    SIRET : texte de la page ' + beforeText.length + ' -> ' + afterText.length + ' caractères après clic.');
+    log('    SIRET : texte de la page ' + beforeText.length + ' -> ' + afterText.length + ' caractères après activation.');
 
-    var dialog = doc.querySelector('[data-testid="french-legal-info-modal"], [role="dialog"], [role="alertdialog"], [aria-modal="true"]');
+    var dialog = findDialog();
     if (dialog) {
       var m = SIRET_PATTERN.exec(dialog.innerText || '');
       if (m) return m[0].replace(/\s/g, '');
       log('    SIRET : popup ouverte mais aucun numéro à 14 chiffres dedans.');
     } else {
-      log('    SIRET : toujours aucune popup détectée ensuite.');
+      log('    SIRET : toujours aucune popup détectée ensuite (clavier, React, souris simulés).');
     }
 
     var beforeMatches = new Set();
@@ -297,7 +331,7 @@
     while ((mm = reAfter.exec(afterText)) !== null) {
       if (!beforeMatches.has(mm[0])) return mm[0].replace(/\s/g, '');
     }
-    log('    SIRET : introuvable (aucun nouveau numéro apparu après le clic).');
+    log('    SIRET : introuvable (aucun nouveau numéro apparu).');
     return '';
   }
 
