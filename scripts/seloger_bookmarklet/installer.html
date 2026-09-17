@@ -1,0 +1,454 @@
+<title>Export SeLoger</title>
+<style>
+  :root {
+    --bg: #F5F3ED;
+    --surface: #FFFFFF;
+    --surface-alt: #EBE6D9;
+    --border: #DAD3C1;
+    --text: #201C15;
+    --text-muted: #635C4E;
+    --accent: #2E5C4E;
+    --accent-strong: #204238;
+    --accent-contrast: #FDFBF6;
+    --warn-bg: #FBEEDC;
+    --warn-text: #7A4A12;
+    --warn-border: #E7C793;
+    --danger: #93321F;
+    --danger-bg: #FBE8E2;
+    --code-bg: #EFEAdd;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171A;
+      --surface: #1B1F22;
+      --surface-alt: #23282C;
+      --border: #343A3F;
+      --text: #EDEAE2;
+      --text-muted: #A6A08F;
+      --accent: #6FBFA3;
+      --accent-strong: #8FD4BA;
+      --accent-contrast: #0B1210;
+      --warn-bg: #2C2313;
+      --warn-text: #E8B978;
+      --warn-border: #4A3A1C;
+      --danger: #E2917C;
+      --danger-bg: #2E1D18;
+      --code-bg: #23282C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171A;
+    --surface: #1B1F22;
+    --surface-alt: #23282C;
+    --border: #343A3F;
+    --text: #EDEAE2;
+    --text-muted: #A6A08F;
+    --accent: #6FBFA3;
+    --accent-strong: #8FD4BA;
+    --accent-contrast: #0B1210;
+    --warn-bg: #2C2313;
+    --warn-text: #E8B978;
+    --warn-border: #4A3A1C;
+    --danger: #E2917C;
+    --danger-bg: #2E1D18;
+    --code-bg: #23282C;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding-inline: 20px;
+    padding-block: 40px;
+    line-height: 1.55;
+  }
+
+  main {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  h1, h2 {
+    font-family: "Newsreader", Georgia, serif;
+    font-weight: 600;
+    text-wrap: balance;
+    color: var(--text);
+    margin: 0 0 8px;
+  }
+
+  h1 { font-size: 2rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.3rem; margin-top: 0; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+
+  .lede {
+    color: var(--text-muted);
+    font-size: 1.02rem;
+    max-width: 58ch;
+  }
+
+  section {
+    margin-top: 40px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .hero-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .bookmarklet-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+
+  #drag-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 12px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    cursor: grab;
+    border: 1px solid var(--accent-strong);
+    white-space: nowrap;
+  }
+  #drag-link:active { cursor: grabbing; }
+
+  .hint {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  #copy-btn {
+    background: var(--surface-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  #copy-btn:hover { border-color: var(--accent); }
+  #copy-status {
+    font-size: 0.8rem;
+    color: var(--accent);
+    min-height: 1.2em;
+  }
+
+  ol.steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  ol.steps li {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+
+  .step-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent-contrast);
+    background: var(--accent);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .step-body strong { display: block; margin-bottom: 2px; }
+  .step-body p { margin: 4px 0 0; color: var(--text-muted); font-size: 0.94rem; }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    background: var(--code-bg);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    font-size: 0.88em;
+  }
+
+  .callout {
+    border-radius: 10px;
+    padding: 16px 18px;
+    border: 1px solid var(--warn-border);
+    background: var(--warn-bg);
+    color: var(--warn-text);
+  }
+  .callout h3 {
+    margin: 0 0 8px;
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+  .callout ul { margin: 0; padding-left: 1.2em; }
+  .callout li { margin-bottom: 6px; }
+  .callout.danger {
+    border-color: var(--danger);
+    background: var(--danger-bg);
+    color: var(--danger);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  table caption { text-align: left; color: var(--text-muted); margin-bottom: 8px; font-size: 0.85rem; }
+  th, td {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--text-muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .table-wrap { overflow-x: auto; }
+
+  details {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    background: var(--surface);
+  }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.85rem;
+  }
+  details[open] summary { margin-bottom: 10px; }
+  details p { color: var(--text-muted); font-size: 0.9rem; }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+  }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 1.6rem; }
+    .bookmarklet-row { flex-direction: column; align-items: stretch; }
+    #drag-link { justify-content: center; }
+  }
+</style>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+
+<main>
+  <div class="eyebrow">Outil interne &middot; annuaire pro SeLoger</div>
+  <h1>Export SeLoger</h1>
+  <p class="lede">
+    Un favori de navigateur qui exporte en CSV les clients d'une page annuaire
+    SeLoger (nom, type, nb d'annonces, adresse, téléphone, SIRET, site web) —
+    sans rien installer. Il tourne dans ta session déjà connectée, pas dans un
+    outil séparé.
+  </p>
+
+  <div class="hero-card">
+    <div class="bookmarklet-row">
+      <a id="drag-link" href="#" draggable="true">🗂️ Export SeLoger</a>
+      <span class="hint">⟵ glisse ce bouton dans ta barre de favoris</span>
+    </div>
+    <div class="bookmarklet-row">
+      <button id="copy-btn" type="button">Copier le code du favori</button>
+      <span id="copy-status" role="status"></span>
+    </div>
+  </div>
+
+  <section>
+    <h2>Installation (une fois)</h2>
+    <div class="card">
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <span class="step-body">
+            <strong>Affiche ta barre de favoris</strong>
+            <p>Si elle n'est pas visible : <code>Ctrl/Cmd + Maj + B</code> dans Chrome, Edge ou Firefox.</p>
+          </span>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <span class="step-body">
+            <strong>Glisse le bouton "🗂️ Export SeLoger" ci-dessus dans la barre</strong>
+            <p>Un nouveau favori apparaît. Tu peux le renommer si tu veux.</p>
+          </span>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <span class="step-body">
+            <strong>Le glisser-déposer ne fonctionne pas ?</strong>
+            <p>
+              Clique "Copier le code du favori", puis dans ta barre de favoris :
+              clic droit &rarr; <em>Ajouter une page</em> (ou <em>Nouveau favori</em>) &rarr;
+              mets un nom (ex: "Export SeLoger") et colle le code copié dans le champ URL/adresse.
+            </p>
+          </span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <h2>À chaque export</h2>
+    <div class="card">
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <span class="step-body">
+            <strong>Va sur la page annuaire du département sur seloger.com</strong>
+            <p>Ex : <code>seloger.com/annuaire/indre-et-loire-37/</code></p>
+          </span>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <span class="step-body">
+            <strong>Clique sur le favori "🗂️ Export SeLoger"</strong>
+            <p>Un petit panneau apparaît en haut à droite de la page.</p>
+          </span>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <span class="step-body">
+            <strong>Choisis les pages, clique "Lancer"</strong>
+            <p>Laisse l'onglet ouvert pendant l'export — ferme le panneau ou change de page l'arrête.</p>
+          </span>
+        </li>
+        <li>
+          <span class="step-num">4</span>
+          <span class="step-body">
+            <strong>Clique "Télécharger le CSV"</strong>
+            <p>Le fichier s'ouvre directement dans Excel (colonnes déjà séparées).</p>
+          </span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="callout danger">
+      <h3>⚠️ À lire avant de lancer un gros export</h3>
+      <ul>
+        <li>SeLoger détecte et bloque temporairement les comportements de scraping trop rapides ou trop volumineux (message "Accès temporairement restreint"). Un blocage touche la connexion de la personne qui l'a déclenché, pas les autres.</li>
+        <li><strong>Découpe les gros départements en tranches</strong> (ex: pages 1-15, pause, puis 16-30) plutôt qu'un export complet d'un coup, surtout pour Paris ou les grandes villes.</li>
+        <li>Si un message de blocage apparaît : arrête, attends quelques heures avant de réessayer sur seloger.com (même en navigation normale). Insister prolonge le blocage.</li>
+        <li>Un seul export à la fois par personne — ne lance pas plusieurs favoris en parallèle sur plusieurs onglets.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Colonnes du CSV</h2>
+    <div class="card table-wrap">
+      <table>
+        <caption>Une ligne par client de l'annuaire</caption>
+        <thead>
+          <tr><th>Colonne</th><th>Contenu</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>nom_client</code></td><td>Nom de l'agence / du professionnel</td></tr>
+          <tr><td><code>type_client</code></td><td>Agence immobilière, agent commercial, notaire...</td></tr>
+          <tr><td><code>nb_annonces_vente</code></td><td>Nombre de biens en vente en ligne</td></tr>
+          <tr><td><code>nb_annonces_location</code></td><td>Nombre de biens en location en ligne</td></tr>
+          <tr><td><code>adresse_postale</code></td><td>Adresse de l'agence (si disponible)</td></tr>
+          <tr><td><code>siret_ou_numero_site</code></td><td>SIRET (fiche "Mentions légales")</td></tr>
+          <tr><td><code>telephone</code></td><td>Numéro de téléphone (si disponible)</td></tr>
+          <tr><td><code>lien_page_pro</code></td><td>Lien vers la fiche pro SeLoger</td></tr>
+          <tr><td><code>site_web_pro</code></td><td>Site web du professionnel (si disponible)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <details>
+      <summary>Détails techniques</summary>
+      <p>
+        Le favori lit le JSON déjà présent dans la page (le même que SeLoger utilise
+        pour afficher l'annuaire), tourne page par page avec des délais entre chaque
+        fiche, et génère le CSV directement dans ton navigateur — aucune donnée
+        n'est envoyée à un serveur externe. C'est la même logique que le script
+        Python <code>scrape_seloger.py</code> du dépôt, adaptée pour tourner sans
+        installation dans un navigateur verrouillé.
+      </p>
+      <p>
+        Un souci technique ou un champ qui sort vide/faux ? Remonte-le avec le nom
+        du département et une copie du message affiché dans le panneau.
+      </p>
+    </details>
+  </section>
+
+  <footer>
+    Usage interne — prospection B2B sur des données professionnelles publiques de l'annuaire SeLoger.
+  </footer>
+</main>
+
+<script>
+  var BOOKMARKLET_HREF = "javascript:%2F**%0A%20*%20Favori%20%22Export%20SeLoger%22%20%E2%80%94%20m%C3%AAme%20logique%20que%20scripts%2Fseloger_scraper%2Fscrape_seloger.py%2C%0A%20*%20mais%20tourne%20dans%20le%20navigateur%20du%20commercial%20(session%20d%C3%A9j%C3%A0%20authentifi%C3%A9e)%2C%20donc%0A%20*%20pas%20d'installation%20n%C3%A9cessaire%20et%20pas%20de%20navigateur%20automatis%C3%A9%20s%C3%A9par%C3%A9%20%C3%A0%20d%C3%A9tecter.%0A%20*%0A%20*%20Usage%20%3A%20sur%20une%20page%20annuaire%20SeLoger%20(ex%3A%20seloger.com%2Fannuaire%2Findre-et-loire-37%2F)%2C%0A%20*%20cliquer%20sur%20ce%20favori.%20Une%20mini-interface%20appara%C3%AEt%20en%20haut%20%C3%A0%20droite%20de%20la%20page.%0A%20*%2F%0A(function%20()%20%7B%0A%20%20'use%20strict'%3B%0A%0A%20%20if%20(window.__selogerExportRunning)%20%7B%0A%20%20%20%20alert(%22Un%20export%20est%20d%C3%A9j%C3%A0%20en%20cours%20sur%20cette%20page.%22)%3B%0A%20%20%20%20return%3B%0A%20%20%7D%0A%20%20if%20(!%2F%5C%2Fannuaire%5C%2F%2F.test(location.pathname))%20%7B%0A%20%20%20%20alert(%22Ouvre%20d'abord%20une%20page%20annuaire%20SeLoger%20(ex%3A%20seloger.com%2Fannuaire%2Findre-et-loire-37%2F)%2C%20puis%20clique%20sur%20ce%20favori.%22)%3B%0A%20%20%20%20return%3B%0A%20%20%7D%0A%20%20window.__selogerExportRunning%20%3D%20true%3B%0A%0A%20%20var%20BASE_URL%20%3D%20location.origin%3B%0A%0A%20%20var%20SIRET_PATTERN%20%3D%20%2F%5Cb%5Cd%7B3%7D%5Cs%3F%5Cd%7B3%7D%5Cs%3F%5Cd%7B3%7D%5Cs%3F%5Cd%7B5%7D%5Cb%2F%3B%0A%20%20var%20PHONE_PATTERN%20%3D%20%2F(%3F%3A0%7C%5C%2B33%5Cs%3F)%5B1-9%5D(%3F%3A%5B%5Cs.-%5D%3F%5Cd%7B2%7D)%7B4%7D%2F%3B%0A%20%20var%20POSTAL_CODE_PATTERN%20%3D%20%2F%5Cb%5Cd%7B5%7D%5Cb%2F%3B%0A%0A%20%20var%20SALE_LABELS%20%3D%20%5B'vendre'%2C%20'vente'%5D%3B%0A%20%20var%20RENT_LABELS%20%3D%20%5B'louer'%2C%20'location'%5D%3B%0A%20%20var%20ALL_LABELS%20%3D%20'vendre%7Clouer%7Cvente%7Clocation'%3B%0A%20%20var%20COUNT_LABEL_PAREN%20%3D%20new%20RegExp('('%20%2B%20ALL_LABELS%20%2B%20')%5C%5CD%7B0%2C15%7D%3F%5C%5C((%5C%5Cd%5B%5C%5Cd%5C%5Cs%5D*)%5C%5C)'%2C%20'gi')%3B%0A%20%20var%20COUNT_NUMBER_THEN_LABEL%20%3D%20new%20RegExp('(%5C%5Cd%5B%5C%5Cd%5C%5Cs%5D%7B0%2C6%7D)%5C%5Cs*annonces%3F%5C%5Cs*(%3F%3Aen%5C%5Cs*)%3F('%20%2B%20ALL_LABELS%20%2B%20')'%2C%20'gi')%3B%0A%20%20var%20COUNT_LABEL_THEN_NUMBER%20%3D%20new%20RegExp('('%20%2B%20ALL_LABELS%20%2B%20')%5C%5CD%7B0%2C3%7D(%5C%5Cd%5B%5C%5Cd%5C%5Cs%5D%7B0%2C6%7D)'%2C%20'gi')%3B%0A%0A%20%20var%20INTERMEDIARY_TYPE_LABELS%20%3D%20%7B%201%3A%20'Agence%20immobili%C3%A8re'%2C%202%3A%20'Agent%20commercial'%2C%203%3A%20'Notaire'%2C%204%3A%20'Constructeur'%2C%205%3A%20'Promoteur'%20%7D%3B%0A%20%20var%20MODAL_TRIGGER_TEXTS%20%3D%20%5B'D%C3%A9tails%20et%20honoraires'%2C%20'Mentions%20l%C3%A9gales'%5D%3B%0A%20%20var%20EXCLUDED_LINK_DOMAINS%20%3D%20%5B'seloger.com'%2C%20'adevinta'%2C%20'facebook.com'%2C%20'instagram.com'%2C%20'twitter.com'%2C%20'x.com'%2C%0A%20%20%20%20'linkedin.com'%2C%20'youtube.com'%2C%20'tiktok.com'%2C%20'google.com'%2C%20'googleapis.com'%2C%20'doubleclick.net'%2C%20'apple.com'%2C%20'play.google.com'%5D%3B%0A%20%20var%20ADDRESS_KEY_HINTS%20%3D%20%5B'address'%2C%20'adresse'%5D%3B%0A%20%20var%20PHONE_KEY_HINTS%20%3D%20%5B'phone'%2C%20'telephone'%2C%20'tel'%5D%3B%0A%20%20var%20WEBSITE_KEY_HINTS%20%3D%20%5B'website'%2C%20'siteweb'%2C%20'siteinternet'%5D%3B%0A%20%20var%20NEXT_DATA_REGEX%20%3D%20%2F%3Cscript%20id%3D%22__NEXT_DATA__%22%20type%3D%22application%5C%2Fjson%22%3E(%5B%5Cs%5CS%5D*%3F)%3C%5C%2Fscript%3E%2F%3B%0A%20%20var%20CSV_FIELDS%20%3D%20%5B'nom_client'%2C%20'type_client'%2C%20'nb_annonces_vente'%2C%20'nb_annonces_location'%2C%0A%20%20%20%20'adresse_postale'%2C%20'siret_ou_numero_site'%2C%20'telephone'%2C%20'lien_page_pro'%2C%20'site_web_pro'%5D%3B%0A%0A%20%20function%20sleep(ms)%20%7B%20return%20new%20Promise(function%20(r)%20%7B%20setTimeout(r%2C%20ms)%3B%20%7D)%3B%20%7D%0A%20%20function%20randomDelay(min%2C%20max)%20%7B%20return%20sleep((min%20%2B%20Math.random()%20*%20(max%20-%20min))%20*%201000)%3B%20%7D%0A%0A%20%20function%20canonicalCountLabel(word)%20%7B%0A%20%20%20%20var%20w%20%3D%20word.toLowerCase()%3B%0A%20%20%20%20if%20(SALE_LABELS.indexOf(w)%20!%3D%3D%20-1)%20return%20'vente'%3B%0A%20%20%20%20if%20(RENT_LABELS.indexOf(w)%20!%3D%3D%20-1)%20return%20'location'%3B%0A%20%20%20%20return%20w%3B%0A%20%20%7D%0A%0A%20%20function%20parsePropertiesCounts(text)%20%7B%0A%20%20%20%20var%20counts%20%3D%20%7B%20vente%3A%20''%2C%20location%3A%20''%20%7D%3B%0A%20%20%20%20%5BCOUNT_LABEL_PAREN%2C%20COUNT_NUMBER_THEN_LABEL%2C%20COUNT_LABEL_THEN_NUMBER%5D.forEach(function%20(pattern)%20%7B%0A%20%20%20%20%20%20var%20re%20%3D%20new%20RegExp(pattern.source%2C%20pattern.flags)%3B%0A%20%20%20%20%20%20var%20groupOrder%20%3D%20pattern%20%3D%3D%3D%20COUNT_NUMBER_THEN_LABEL%20%3F%20%5B'number'%2C%20'label'%5D%20%3A%20%5B'label'%2C%20'number'%5D%3B%0A%20%20%20%20%20%20var%20m%3B%0A%20%20%20%20%20%20while%20((m%20%3D%20re.exec(text))%20!%3D%3D%20null)%20%7B%0A%20%20%20%20%20%20%20%20var%20label%20%3D%20groupOrder%5B0%5D%20%3D%3D%3D%20'label'%20%3F%20m%5B1%5D%20%3A%20m%5B2%5D%3B%0A%20%20%20%20%20%20%20%20var%20number%20%3D%20groupOrder%5B0%5D%20%3D%3D%3D%20'label'%20%3F%20m%5B2%5D%20%3A%20m%5B1%5D%3B%0A%20%20%20%20%20%20%20%20var%20key%20%3D%20canonicalCountLabel(label)%3B%0A%20%20%20%20%20%20%20%20if%20((key%20%3D%3D%3D%20'vente'%20%7C%7C%20key%20%3D%3D%3D%20'location')%20%26%26%20!counts%5Bkey%5D)%20%7B%0A%20%20%20%20%20%20%20%20%20%20counts%5Bkey%5D%20%3D%20number.replace(%2F%5CD%2Fg%2C%20'')%3B%0A%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%7D)%3B%0A%20%20%20%20return%20counts%3B%0A%20%20%7D%0A%0A%20%20function%20extractNextDataFromHtml(html)%20%7B%0A%20%20%20%20var%20m%20%3D%20NEXT_DATA_REGEX.exec(html)%3B%0A%20%20%20%20if%20(!m)%20return%20null%3B%0A%20%20%20%20try%20%7B%20return%20JSON.parse(m%5B1%5D)%3B%20%7D%20catch%20(e)%20%7B%20return%20null%3B%20%7D%0A%20%20%7D%0A%0A%20%20function%20extractNextDataFromDocument(doc)%20%7B%0A%20%20%20%20var%20el%20%3D%20doc.getElementById('__NEXT_DATA__')%3B%0A%20%20%20%20if%20(!el)%20return%20null%3B%0A%20%20%20%20try%20%7B%20return%20JSON.parse(el.textContent)%3B%20%7D%20catch%20(e)%20%7B%20return%20null%3B%20%7D%0A%20%20%7D%0A%0A%20%20function%20getSearchResults(nextData)%20%7B%0A%20%20%20%20try%20%7B%20return%20nextData.props.pageProps.initialState.search.results%3B%20%7D%20catch%20(e)%20%7B%20return%20null%3B%20%7D%0A%20%20%7D%0A%0A%20%20function%20buildPageUrl(baseUrl%2C%20pageNum)%20%7B%0A%20%20%20%20var%20u%20%3D%20new%20URL(baseUrl%2C%20location.origin)%3B%0A%20%20%20%20u.searchParams.set('page'%2C%20String(pageNum))%3B%0A%20%20%20%20return%20u.toString()%3B%0A%20%20%7D%0A%0A%20%20function%20labelForIntermediaryType(code)%20%7B%0A%20%20%20%20if%20(code%20%3D%3D%20null)%20return%20''%3B%0A%20%20%20%20return%20INTERMEDIARY_TYPE_LABELS%5Bcode%5D%20%7C%7C%20('Type%20'%20%2B%20code)%3B%0A%20%20%7D%0A%0A%20%20function%20recordFromIntermediary(item)%20%7B%0A%20%20%20%20return%20%7B%0A%20%20%20%20%20%20nom_client%3A%20item.name%20%7C%7C%20''%2C%0A%20%20%20%20%20%20type_client%3A%20labelForIntermediaryType(item.intermediaryType)%2C%0A%20%20%20%20%20%20nb_annonces_vente%3A%20''%2C%0A%20%20%20%20%20%20nb_annonces_location%3A%20''%2C%0A%20%20%20%20%20%20adresse_postale%3A%20''%2C%0A%20%20%20%20%20%20siret_ou_numero_site%3A%20''%2C%0A%20%20%20%20%20%20telephone%3A%20''%2C%0A%20%20%20%20%20%20lien_page_pro%3A%20item.url%20%3F%20new%20URL(item.url%2C%20BASE_URL).toString()%20%3A%20''%2C%0A%20%20%20%20%20%20site_web_pro%3A%20''%0A%20%20%20%20%7D%3B%0A%20%20%7D%0A%0A%20%20function%20findValuesByKeyHints(obj%2C%20hints%2C%20seen)%20%7B%0A%20%20%20%20seen%20%3D%20seen%20%7C%7C%20new%20Set()%3B%0A%20%20%20%20var%20results%20%3D%20%5B%5D%3B%0A%20%20%20%20if%20(obj%20%26%26%20typeof%20obj%20%3D%3D%3D%20'object')%20%7B%0A%20%20%20%20%20%20if%20(seen.has(obj))%20return%20results%3B%0A%20%20%20%20%20%20seen.add(obj)%3B%0A%20%20%20%20%20%20if%20(Array.isArray(obj))%20%7B%0A%20%20%20%20%20%20%20%20obj.forEach(function%20(item)%20%7B%20results%20%3D%20results.concat(findValuesByKeyHints(item%2C%20hints%2C%20seen))%3B%20%7D)%3B%0A%20%20%20%20%20%20%7D%20else%20%7B%0A%20%20%20%20%20%20%20%20Object.keys(obj).forEach(function%20(k)%20%7B%0A%20%20%20%20%20%20%20%20%20%20var%20kl%20%3D%20k.toLowerCase()%3B%0A%20%20%20%20%20%20%20%20%20%20if%20(hints.some(function%20(h)%20%7B%20return%20kl.indexOf(h.toLowerCase())%20!%3D%3D%20-1%3B%20%7D))%20%7B%0A%20%20%20%20%20%20%20%20%20%20%20%20results.push(%5Bk%2C%20obj%5Bk%5D%5D)%3B%0A%20%20%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%20%20%20%20results%20%3D%20results.concat(findValuesByKeyHints(obj%5Bk%5D%2C%20hints%2C%20seen))%3B%0A%20%20%20%20%20%20%20%20%7D)%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%7D%0A%20%20%20%20return%20results%3B%0A%20%20%7D%0A%0A%20%20function%20flattenScalar(value)%20%7B%0A%20%20%20%20if%20(value%20%3D%3D%20null)%20return%20''%3B%0A%20%20%20%20if%20(typeof%20value%20%3D%3D%3D%20'string'%20%7C%7C%20typeof%20value%20%3D%3D%3D%20'number')%20return%20String(value).trim()%3B%0A%20%20%20%20if%20(Array.isArray(value))%20return%20value.map(flattenScalar).filter(Boolean).join('%20')%3B%0A%20%20%20%20if%20(typeof%20value%20%3D%3D%3D%20'object')%20return%20Object.keys(value).map(function%20(k)%20%7B%20return%20flattenScalar(value%5Bk%5D)%3B%20%7D).filter(Boolean).join('%20')%3B%0A%20%20%20%20return%20''%3B%0A%20%20%7D%0A%0A%20%20function%20firstNonEmpty(pairs)%20%7B%0A%20%20%20%20for%20(var%20i%20%3D%200%3B%20i%20%3C%20pairs.length%3B%20i%2B%2B)%20%7B%0A%20%20%20%20%20%20var%20flat%20%3D%20flattenScalar(pairs%5Bi%5D%5B1%5D)%3B%0A%20%20%20%20%20%20if%20(flat)%20return%20flat%3B%0A%20%20%20%20%7D%0A%20%20%20%20return%20''%3B%0A%20%20%7D%0A%0A%20%20function%20loadHiddenIframe(url)%20%7B%0A%20%20%20%20return%20new%20Promise(function%20(resolve%2C%20reject)%20%7B%0A%20%20%20%20%20%20var%20iframe%20%3D%20document.createElement('iframe')%3B%0A%20%20%20%20%20%20iframe.style.position%20%3D%20'fixed'%3B%0A%20%20%20%20%20%20iframe.style.width%20%3D%20'1px'%3B%0A%20%20%20%20%20%20iframe.style.height%20%3D%20'1px'%3B%0A%20%20%20%20%20%20iframe.style.opacity%20%3D%20'0'%3B%0A%20%20%20%20%20%20iframe.style.pointerEvents%20%3D%20'none'%3B%0A%20%20%20%20%20%20iframe.src%20%3D%20url%3B%0A%20%20%20%20%20%20var%20timeout%20%3D%20setTimeout(function%20()%20%7B%20reject(new%20Error('timeout'))%3B%20%7D%2C%2020000)%3B%0A%20%20%20%20%20%20iframe.onload%20%3D%20function%20()%20%7B%20clearTimeout(timeout)%3B%20resolve(iframe)%3B%20%7D%3B%0A%20%20%20%20%20%20iframe.onerror%20%3D%20function%20()%20%7B%20clearTimeout(timeout)%3B%20reject(new%20Error('load%20error'))%3B%20%7D%3B%0A%20%20%20%20%20%20document.body.appendChild(iframe)%3B%0A%20%20%20%20%7D)%3B%0A%20%20%7D%0A%0A%20%20function%20findTrigger(doc%2C%20texts)%20%7B%0A%20%20%20%20var%20all%20%3D%20doc.querySelectorAll('button%2C%20a%2C%20span%2C%20div%2C%20p')%3B%0A%20%20%20%20var%20best%20%3D%20null%3B%0A%20%20%20%20for%20(var%20i%20%3D%200%3B%20i%20%3C%20all.length%3B%20i%2B%2B)%20%7B%0A%20%20%20%20%20%20var%20el%20%3D%20all%5Bi%5D%3B%0A%20%20%20%20%20%20var%20t%20%3D%20(el.textContent%20%7C%7C%20'').trim()%3B%0A%20%20%20%20%20%20if%20(!t%20%7C%7C%20t.length%20%3E%2080)%20continue%3B%0A%20%20%20%20%20%20for%20(var%20j%20%3D%200%3B%20j%20%3C%20texts.length%3B%20j%2B%2B)%20%7B%0A%20%20%20%20%20%20%20%20if%20(t.indexOf(texts%5Bj%5D)%20!%3D%3D%20-1)%20%7B%0A%20%20%20%20%20%20%20%20%20%20if%20(!best%20%7C%7C%20t.length%20%3C%20best.textContent.trim().length)%20best%20%3D%20el%3B%0A%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%7D%0A%20%20%20%20return%20best%3B%0A%20%20%7D%0A%0A%20%20async%20function%20extractSiretFromIframe(doc)%20%7B%0A%20%20%20%20var%20beforeText%20%3D%20doc.body%20%3F%20doc.body.innerText%20%3A%20''%3B%0A%20%20%20%20var%20trigger%20%3D%20findTrigger(doc%2C%20MODAL_TRIGGER_TEXTS)%3B%0A%20%20%20%20if%20(!trigger)%20return%20''%3B%0A%20%20%20%20trigger.click()%3B%0A%20%20%20%20await%20sleep(900)%3B%0A%0A%20%20%20%20var%20dialog%20%3D%20doc.querySelector('%5Brole%3D%22dialog%22%5D')%3B%0A%20%20%20%20if%20(dialog)%20%7B%0A%20%20%20%20%20%20var%20m%20%3D%20SIRET_PATTERN.exec(dialog.innerText%20%7C%7C%20'')%3B%0A%20%20%20%20%20%20if%20(m)%20return%20m%5B0%5D.replace(%2F%5Cs%2Fg%2C%20'')%3B%0A%20%20%20%20%7D%0A%0A%20%20%20%20var%20afterText%20%3D%20doc.body%20%3F%20doc.body.innerText%20%3A%20''%3B%0A%20%20%20%20var%20beforeMatches%20%3D%20new%20Set()%3B%0A%20%20%20%20var%20reBefore%20%3D%20new%20RegExp(SIRET_PATTERN.source%2C%20'g')%3B%0A%20%20%20%20var%20mm%3B%0A%20%20%20%20while%20((mm%20%3D%20reBefore.exec(beforeText))%20!%3D%3D%20null)%20beforeMatches.add(mm%5B0%5D)%3B%0A%20%20%20%20var%20reAfter%20%3D%20new%20RegExp(SIRET_PATTERN.source%2C%20'g')%3B%0A%20%20%20%20while%20((mm%20%3D%20reAfter.exec(afterText))%20!%3D%3D%20null)%20%7B%0A%20%20%20%20%20%20if%20(!beforeMatches.has(mm%5B0%5D))%20return%20mm%5B0%5D.replace(%2F%5Cs%2Fg%2C%20'')%3B%0A%20%20%20%20%7D%0A%20%20%20%20return%20''%3B%0A%20%20%7D%0A%0A%20%20async%20function%20scrapeDetailPage(url)%20%7B%0A%20%20%20%20var%20extra%20%3D%20%7B%20adresse_postale%3A%20''%2C%20siret_ou_numero_site%3A%20''%2C%20site_web_pro%3A%20''%2C%20telephone%3A%20''%2C%20nb_annonces_vente%3A%20''%2C%20nb_annonces_location%3A%20''%20%7D%3B%0A%20%20%20%20var%20iframe%3B%0A%20%20%20%20try%20%7B%0A%20%20%20%20%20%20iframe%20%3D%20await%20loadHiddenIframe(url)%3B%0A%20%20%20%20%7D%20catch%20(e)%20%7B%0A%20%20%20%20%20%20return%20extra%3B%0A%20%20%20%20%7D%0A%20%20%20%20await%20sleep(1200)%3B%0A%0A%20%20%20%20var%20doc%3B%0A%20%20%20%20try%20%7B%20doc%20%3D%20iframe.contentDocument%3B%20%7D%20catch%20(e)%20%7B%20doc%20%3D%20null%3B%20%7D%0A%20%20%20%20if%20(!doc)%20%7B%20iframe.remove()%3B%20return%20extra%3B%20%7D%0A%0A%20%20%20%20var%20nextData%20%3D%20extractNextDataFromDocument(doc)%3B%0A%20%20%20%20if%20(nextData)%20%7B%0A%20%20%20%20%20%20extra.adresse_postale%20%3D%20firstNonEmpty(findValuesByKeyHints(nextData%2C%20ADDRESS_KEY_HINTS))%3B%0A%20%20%20%20%20%20extra.telephone%20%3D%20firstNonEmpty(findValuesByKeyHints(nextData%2C%20PHONE_KEY_HINTS))%3B%0A%20%20%20%20%20%20var%20webPairs%20%3D%20findValuesByKeyHints(nextData%2C%20WEBSITE_KEY_HINTS)%3B%0A%20%20%20%20%20%20for%20(var%20i%20%3D%200%3B%20i%20%3C%20webPairs.length%3B%20i%2B%2B)%20%7B%0A%20%20%20%20%20%20%20%20var%20flat%20%3D%20flattenScalar(webPairs%5Bi%5D%5B1%5D)%3B%0A%20%20%20%20%20%20%20%20if%20(flat.indexOf('http')%20%3D%3D%3D%200%20%26%26%20!EXCLUDED_LINK_DOMAINS.some(function%20(d)%20%7B%20return%20flat.indexOf(d)%20!%3D%3D%20-1%3B%20%7D))%20%7B%0A%20%20%20%20%20%20%20%20%20%20extra.site_web_pro%20%3D%20flat%3B%0A%20%20%20%20%20%20%20%20%20%20break%3B%0A%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%7D%0A%0A%20%20%20%20try%20%7B%20extra.siret_ou_numero_site%20%3D%20await%20extractSiretFromIframe(doc)%3B%20%7D%20catch%20(e)%20%7B%20%2F*%20ignore%20*%2F%20%7D%0A%0A%20%20%20%20try%20%7B%0A%20%20%20%20%20%20var%20propsEl%20%3D%20doc.querySelector('%23properties')%3B%0A%20%20%20%20%20%20if%20(propsEl)%20%7B%0A%20%20%20%20%20%20%20%20var%20counts%20%3D%20parsePropertiesCounts(propsEl.innerText%20%7C%7C%20'')%3B%0A%20%20%20%20%20%20%20%20extra.nb_annonces_vente%20%3D%20counts.vente%3B%0A%20%20%20%20%20%20%20%20extra.nb_annonces_location%20%3D%20counts.location%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%7D%20catch%20(e)%20%7B%20%2F*%20ignore%20*%2F%20%7D%0A%0A%20%20%20%20if%20(!extra.telephone%20%7C%7C%20!extra.adresse_postale)%20%7B%0A%20%20%20%20%20%20var%20bodyText%20%3D%20doc.body%20%3F%20doc.body.innerText%20%3A%20''%3B%0A%20%20%20%20%20%20var%20lines%20%3D%20bodyText.split('%5Cn').map(function%20(l)%20%7B%20return%20l.trim()%3B%20%7D).filter(Boolean)%3B%0A%20%20%20%20%20%20if%20(!extra.telephone)%20%7B%0A%20%20%20%20%20%20%20%20var%20pm%20%3D%20PHONE_PATTERN.exec(bodyText)%3B%0A%20%20%20%20%20%20%20%20if%20(pm)%20extra.telephone%20%3D%20pm%5B0%5D%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20if%20(!extra.adresse_postale)%20%7B%0A%20%20%20%20%20%20%20%20for%20(var%20li%20%3D%200%3B%20li%20%3C%20lines.length%3B%20li%2B%2B)%20%7B%0A%20%20%20%20%20%20%20%20%20%20if%20(POSTAL_CODE_PATTERN.test(lines%5Bli%5D)%20%26%26%20lines%5Bli%5D.length%20%3C%20120)%20%7B%20extra.adresse_postale%20%3D%20lines%5Bli%5D%3B%20break%3B%20%7D%0A%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%7D%0A%0A%20%20%20%20if%20(!extra.site_web_pro)%20%7B%0A%20%20%20%20%20%20try%20%7B%0A%20%20%20%20%20%20%20%20var%20links%20%3D%20doc.querySelectorAll('a%5Bhref%5E%3D%22http%22%5D')%3B%0A%20%20%20%20%20%20%20%20for%20(var%20k%20%3D%200%3B%20k%20%3C%20links.length%3B%20k%2B%2B)%20%7B%0A%20%20%20%20%20%20%20%20%20%20var%20href%20%3D%20links%5Bk%5D.getAttribute('href')%20%7C%7C%20''%3B%0A%20%20%20%20%20%20%20%20%20%20if%20(href%20%26%26%20!EXCLUDED_LINK_DOMAINS.some(function%20(d)%20%7B%20return%20href.indexOf(d)%20!%3D%3D%20-1%3B%20%7D))%20%7B%0A%20%20%20%20%20%20%20%20%20%20%20%20extra.site_web_pro%20%3D%20href%3B%0A%20%20%20%20%20%20%20%20%20%20%20%20break%3B%0A%20%20%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%7D%20catch%20(e)%20%7B%20%2F*%20ignore%20*%2F%20%7D%0A%20%20%20%20%7D%0A%0A%20%20%20%20iframe.remove()%3B%0A%20%20%20%20return%20extra%3B%0A%20%20%7D%0A%0A%20%20function%20toCsv(records)%20%7B%0A%20%20%20%20function%20esc(v)%20%7B%0A%20%20%20%20%20%20v%20%3D%20(v%20%3D%3D%20null%20%3F%20''%20%3A%20String(v))%3B%0A%20%20%20%20%20%20if%20(%2F%5B%22%2C%5Cn%3B%5D%2F.test(v))%20v%20%3D%20'%22'%20%2B%20v.replace(%2F%22%2Fg%2C%20'%22%22')%20%2B%20'%22'%3B%0A%20%20%20%20%20%20return%20v%3B%0A%20%20%20%20%7D%0A%20%20%20%20var%20lines%20%3D%20%5BCSV_FIELDS.join('%3B')%5D%3B%0A%20%20%20%20records.forEach(function%20(r)%20%7B%0A%20%20%20%20%20%20lines.push(CSV_FIELDS.map(function%20(f)%20%7B%20return%20esc(r%5Bf%5D)%3B%20%7D).join('%3B'))%3B%0A%20%20%20%20%7D)%3B%0A%20%20%20%20return%20'%EF%BB%BF'%20%2B%20lines.join('%5Cr%5Cn')%3B%0A%20%20%7D%0A%0A%20%20function%20downloadCsv(records%2C%20filename)%20%7B%0A%20%20%20%20var%20blob%20%3D%20new%20Blob(%5BtoCsv(records)%5D%2C%20%7B%20type%3A%20'text%2Fcsv%3Bcharset%3Dutf-8%3B'%20%7D)%3B%0A%20%20%20%20var%20url%20%3D%20URL.createObjectURL(blob)%3B%0A%20%20%20%20var%20a%20%3D%20document.createElement('a')%3B%0A%20%20%20%20a.href%20%3D%20url%3B%0A%20%20%20%20a.download%20%3D%20filename%20%7C%7C%20'seloger_export.csv'%3B%0A%20%20%20%20document.body.appendChild(a)%3B%0A%20%20%20%20a.click()%3B%0A%20%20%20%20a.remove()%3B%0A%20%20%20%20URL.revokeObjectURL(url)%3B%0A%20%20%7D%0A%0A%20%20async%20function%20runExport(config%2C%20ui)%20%7B%0A%20%20%20%20var%20baseUrl%20%3D%20location.href%3B%0A%20%20%20%20var%20records%20%3D%20%5B%5D%3B%0A%0A%20%20%20%20var%20firstUrl%20%3D%20buildPageUrl(baseUrl%2C%20config.startPage)%3B%0A%20%20%20%20ui.log('Chargement%20page%20'%20%2B%20config.startPage%20%2B%20'...')%3B%0A%20%20%20%20var%20resp%20%3D%20await%20fetch(firstUrl)%3B%0A%20%20%20%20var%20html%20%3D%20await%20resp.text()%3B%0A%20%20%20%20var%20nextData%20%3D%20extractNextDataFromHtml(html)%3B%0A%20%20%20%20if%20(!nextData)%20%7B%20ui.log('ERREUR%3A%20bloc%20de%20donn%C3%A9es%20introuvable%20(page%20bloqu%C3%A9e%20ou%20structure%20du%20site%20chang%C3%A9e).')%3B%20return%20records%3B%20%7D%0A%20%20%20%20var%20results%20%3D%20getSearchResults(nextData)%3B%0A%20%20%20%20if%20(!results)%20%7B%20ui.log('ERREUR%3A%20structure%20de%20donn%C3%A9es%20inattendue.')%3B%20return%20records%3B%20%7D%0A%0A%20%20%20%20var%20totalCount%20%3D%20results.intermediariesCount%20%7C%7C%200%3B%0A%20%20%20%20var%20batch%20%3D%20results.intermediaries%20%7C%7C%20%5B%5D%3B%0A%20%20%20%20var%20pageSize%20%3D%20batch.length%20%7C%7C%201%3B%0A%20%20%20%20var%20totalPages%20%3D%20Math.max(1%2C%20Math.ceil(totalCount%20%2F%20pageSize))%3B%0A%20%20%20%20var%20lastPage%20%3D%20config.endPage%20%3F%20Math.min(totalPages%2C%20config.endPage)%20%3A%20totalPages%3B%0A%0A%20%20%20%20ui.log(totalCount%20%2B%20'%20client(s)%20au%20total%2C%20pages%20'%20%2B%20config.startPage%20%2B%20'%20%C3%A0%20'%20%2B%20lastPage%20%2B%20'%20(sur%20'%20%2B%20totalPages%20%2B%20'%20au%20total).')%3B%0A%0A%20%20%20%20var%20pageNum%20%3D%20config.startPage%3B%0A%20%20%20%20while%20(true)%20%7B%0A%20%20%20%20%20%20if%20(ui.stopped)%20%7B%20ui.log(%22Arr%C3%AAt%C3%A9.%22)%3B%20break%3B%20%7D%0A%20%20%20%20%20%20ui.log('---%20Page%20'%20%2B%20pageNum%20%2B%20'%2F'%20%2B%20lastPage%20%2B%20'%3A%20'%20%2B%20batch.length%20%2B%20'%20client(s)%20---')%3B%0A%0A%20%20%20%20%20%20for%20(var%20i%20%3D%200%3B%20i%20%3C%20batch.length%3B%20i%2B%2B)%20%7B%0A%20%20%20%20%20%20%20%20if%20(ui.stopped)%20break%3B%0A%20%20%20%20%20%20%20%20var%20record%20%3D%20recordFromIntermediary(batch%5Bi%5D)%3B%0A%0A%20%20%20%20%20%20%20%20if%20(config.withDetails%20%26%26%20record.lien_page_pro)%20%7B%0A%20%20%20%20%20%20%20%20%20%20var%20extra%20%3D%20await%20scrapeDetailPage(record.lien_page_pro)%3B%0A%20%20%20%20%20%20%20%20%20%20Object.keys(extra).forEach(function%20(k)%20%7B%20if%20(extra%5Bk%5D)%20record%5Bk%5D%20%3D%20extra%5Bk%5D%3B%20%7D)%3B%0A%20%20%20%20%20%20%20%20%7D%0A%0A%20%20%20%20%20%20%20%20records.push(record)%3B%0A%20%20%20%20%20%20%20%20ui.log('%20%20%2B%20'%20%2B%20record.nom_client%20%2B%20'%20(vente%3D'%20%2B%20record.nb_annonces_vente%20%2B%20'%2C%20location%3D'%20%2B%20record.nb_annonces_location%20%2B%20')')%3B%0A%20%20%20%20%20%20%20%20ui.onRecordsUpdated(records)%3B%0A%0A%20%20%20%20%20%20%20%20await%20randomDelay(config.minDelay%2C%20config.maxDelay)%3B%0A%20%20%20%20%20%20%7D%0A%0A%20%20%20%20%20%20if%20(ui.stopped%20%7C%7C%20pageNum%20%3E%3D%20lastPage)%20break%3B%0A%0A%20%20%20%20%20%20pageNum%2B%2B%3B%0A%20%20%20%20%20%20await%20randomDelay(config.minDelay%2C%20config.maxDelay)%3B%0A%20%20%20%20%20%20ui.log('Chargement%20page%20'%20%2B%20pageNum%20%2B%20'...')%3B%0A%20%20%20%20%20%20var%20r2%20%3D%20await%20fetch(buildPageUrl(baseUrl%2C%20pageNum))%3B%0A%20%20%20%20%20%20var%20h2%20%3D%20await%20r2.text()%3B%0A%20%20%20%20%20%20var%20nd2%20%3D%20extractNextDataFromHtml(h2)%3B%0A%20%20%20%20%20%20if%20(!nd2)%20%7B%20ui.log('Page%20'%20%2B%20pageNum%20%2B%20'%3A%20bloc%20introuvable%2C%20arr%C3%AAt.')%3B%20break%3B%20%7D%0A%20%20%20%20%20%20var%20res2%20%3D%20getSearchResults(nd2)%3B%0A%20%20%20%20%20%20if%20(!res2)%20%7B%20ui.log('Page%20'%20%2B%20pageNum%20%2B%20'%3A%20structure%20inattendue%2C%20arr%C3%AAt.')%3B%20break%3B%20%7D%0A%20%20%20%20%20%20batch%20%3D%20res2.intermediaries%20%7C%7C%20%5B%5D%3B%0A%20%20%20%20%20%20if%20(!batch.length)%20%7B%20ui.log('Page%20'%20%2B%20pageNum%20%2B%20'%3A%20aucun%20client%2C%20arr%C3%AAt.')%3B%20break%3B%20%7D%0A%20%20%20%20%7D%0A%0A%20%20%20%20return%20records%3B%0A%20%20%7D%0A%0A%20%20function%20buildUi()%20%7B%0A%20%20%20%20var%20panel%20%3D%20document.createElement('div')%3B%0A%20%20%20%20panel.id%20%3D%20'seloger-export-panel'%3B%0A%20%20%20%20panel.style.cssText%20%3D%20'position%3Afixed%3Btop%3A16px%3Bright%3A16px%3Bwidth%3A340px%3Bmax-height%3A82vh%3Boverflow%3Aauto%3B'%20%2B%0A%20%20%20%20%20%20'background%3A%23fff%3Bborder%3A1px%20solid%20%23ccc%3Bborder-radius%3A8px%3Bbox-shadow%3A0%204px%2016px%20rgba(0%2C0%2C0%2C.25)%3B'%20%2B%0A%20%20%20%20%20%20'z-index%3A2147483647%3Bfont-family%3Asystem-ui%2C-apple-system%2Csans-serif%3Bfont-size%3A13px%3Bcolor%3A%23222%3Bpadding%3A12px%3B'%3B%0A%0A%20%20%20%20panel.innerHTML%20%3D%0A%20%20%20%20%20%20'%3Cdiv%20style%3D%22display%3Aflex%3Bjustify-content%3Aspace-between%3Balign-items%3Acenter%3Bmargin-bottom%3A8px%3B%22%3E'%20%2B%0A%20%20%20%20%20%20'%3Cstrong%3EExport%20SeLoger%3C%2Fstrong%3E'%20%2B%0A%20%20%20%20%20%20'%3Cbutton%20id%3D%22sl-close%22%20style%3D%22border%3Anone%3Bbackground%3Anone%3Bfont-size%3A16px%3Bcursor%3Apointer%3Bline-height%3A1%3B%22%3E%E2%9C%95%3C%2Fbutton%3E'%20%2B%0A%20%20%20%20%20%20'%3C%2Fdiv%3E'%20%2B%0A%20%20%20%20%20%20'%3Cdiv%20style%3D%22display%3Aflex%3Bgap%3A6px%3Bmargin-bottom%3A6px%3B%22%3E'%20%2B%0A%20%20%20%20%20%20'%3Clabel%20style%3D%22flex%3A1%3B%22%3EPage%20d%C3%A9but%3Cbr%3E%3Cinput%20id%3D%22sl-start%22%20type%3D%22number%22%20min%3D%221%22%20value%3D%221%22%20style%3D%22width%3A100%25%3Bbox-sizing%3Aborder-box%3B%22%3E%3C%2Flabel%3E'%20%2B%0A%20%20%20%20%20%20'%3Clabel%20style%3D%22flex%3A1%3B%22%3EPage%20fin%3Cbr%3E%3Cinput%20id%3D%22sl-end%22%20type%3D%22number%22%20min%3D%221%22%20placeholder%3D%22(toutes)%22%20style%3D%22width%3A100%25%3Bbox-sizing%3Aborder-box%3B%22%3E%3C%2Flabel%3E'%20%2B%0A%20%20%20%20%20%20'%3C%2Fdiv%3E'%20%2B%0A%20%20%20%20%20%20'%3Clabel%20style%3D%22display%3Ablock%3Bmargin-bottom%3A8px%3B%22%3E%3Cinput%20id%3D%22sl-details%22%20type%3D%22checkbox%22%20checked%3E%20Adresse%2Ft%C3%A9l%C3%A9phone%2FSIRET%2Fnb%20annonces%20(plus%20lent)%3C%2Flabel%3E'%20%2B%0A%20%20%20%20%20%20'%3Cdiv%20style%3D%22display%3Aflex%3Bgap%3A8px%3Bmargin-bottom%3A8px%3B%22%3E'%20%2B%0A%20%20%20%20%20%20'%3Cbutton%20id%3D%22sl-start-btn%22%20style%3D%22flex%3A1%3Bpadding%3A6px%3Bbackground%3A%23c0102f%3Bcolor%3A%23fff%3Bborder%3Anone%3Bborder-radius%3A4px%3Bcursor%3Apointer%3B%22%3ELancer%3C%2Fbutton%3E'%20%2B%0A%20%20%20%20%20%20'%3Cbutton%20id%3D%22sl-stop-btn%22%20style%3D%22flex%3A1%3Bpadding%3A6px%3Bborder-radius%3A4px%3Bcursor%3Apointer%3B%22%20disabled%3EArr%C3%AAter%3C%2Fbutton%3E'%20%2B%0A%20%20%20%20%20%20'%3C%2Fdiv%3E'%20%2B%0A%20%20%20%20%20%20'%3Cbutton%20id%3D%22sl-download-btn%22%20style%3D%22width%3A100%25%3Bpadding%3A6px%3Bmargin-bottom%3A8px%3Bborder-radius%3A4px%3Bcursor%3Apointer%3B%22%20disabled%3ET%C3%A9l%C3%A9charger%20le%20CSV%20(0)%3C%2Fbutton%3E'%20%2B%0A%20%20%20%20%20%20'%3Cdiv%20id%3D%22sl-log%22%20style%3D%22background%3A%23f7f7f7%3Bborder%3A1px%20solid%20%23eee%3Bborder-radius%3A4px%3Bpadding%3A6px%3Bheight%3A220px%3Boverflow%3Aauto%3Bwhite-space%3Apre-wrap%3Bfont-family%3Amonospace%3Bfont-size%3A11px%3B%22%3E%3C%2Fdiv%3E'%3B%0A%0A%20%20%20%20document.body.appendChild(panel)%3B%0A%20%20%20%20return%20panel%3B%0A%20%20%7D%0A%0A%20%20var%20panel%20%3D%20buildUi()%3B%0A%20%20var%20logEl%20%3D%20panel.querySelector('%23sl-log')%3B%0A%20%20var%20startBtn%20%3D%20panel.querySelector('%23sl-start-btn')%3B%0A%20%20var%20stopBtn%20%3D%20panel.querySelector('%23sl-stop-btn')%3B%0A%20%20var%20downloadBtn%20%3D%20panel.querySelector('%23sl-download-btn')%3B%0A%20%20var%20closeBtn%20%3D%20panel.querySelector('%23sl-close')%3B%0A%20%20var%20startInput%20%3D%20panel.querySelector('%23sl-start')%3B%0A%20%20var%20endInput%20%3D%20panel.querySelector('%23sl-end')%3B%0A%20%20var%20detailsInput%20%3D%20panel.querySelector('%23sl-details')%3B%0A%0A%20%20var%20currentRecords%20%3D%20%5B%5D%3B%0A%20%20var%20ui%20%3D%20%7B%0A%20%20%20%20stopped%3A%20false%2C%0A%20%20%20%20log%3A%20function%20(msg)%20%7B%0A%20%20%20%20%20%20logEl.textContent%20%2B%3D%20msg%20%2B%20'%5Cn'%3B%0A%20%20%20%20%20%20logEl.scrollTop%20%3D%20logEl.scrollHeight%3B%0A%20%20%20%20%7D%2C%0A%20%20%20%20onRecordsUpdated%3A%20function%20(records)%20%7B%0A%20%20%20%20%20%20currentRecords%20%3D%20records%3B%0A%20%20%20%20%20%20downloadBtn.textContent%20%3D%20'T%C3%A9l%C3%A9charger%20le%20CSV%20('%20%2B%20records.length%20%2B%20')'%3B%0A%20%20%20%20%20%20downloadBtn.disabled%20%3D%20records.length%20%3D%3D%3D%200%3B%0A%20%20%20%20%7D%0A%20%20%7D%3B%0A%0A%20%20closeBtn.onclick%20%3D%20function%20()%20%7B%0A%20%20%20%20ui.stopped%20%3D%20true%3B%0A%20%20%20%20panel.remove()%3B%0A%20%20%20%20window.__selogerExportRunning%20%3D%20false%3B%0A%20%20%7D%3B%0A%0A%20%20stopBtn.onclick%20%3D%20function%20()%20%7B%0A%20%20%20%20ui.stopped%20%3D%20true%3B%0A%20%20%20%20stopBtn.disabled%20%3D%20true%3B%0A%20%20%7D%3B%0A%0A%20%20downloadBtn.onclick%20%3D%20function%20()%20%7B%0A%20%20%20%20var%20deptSlug%20%3D%20(location.pathname.match(%2F%5C%2Fannuaire%5C%2F(%5B%5E%2F%5D%2B)%5C%2F%2F)%20%7C%7C%20%5B%5D)%5B1%5D%20%7C%7C%20'export'%3B%0A%20%20%20%20downloadCsv(currentRecords%2C%20'seloger_'%20%2B%20deptSlug%20%2B%20'.csv')%3B%0A%20%20%7D%3B%0A%0A%20%20startBtn.onclick%20%3D%20async%20function%20()%20%7B%0A%20%20%20%20startBtn.disabled%20%3D%20true%3B%0A%20%20%20%20endInput.disabled%20%3D%20true%3B%0A%20%20%20%20startInput.disabled%20%3D%20true%3B%0A%20%20%20%20detailsInput.disabled%20%3D%20true%3B%0A%20%20%20%20stopBtn.disabled%20%3D%20false%3B%0A%20%20%20%20ui.stopped%20%3D%20false%3B%0A%0A%20%20%20%20var%20config%20%3D%20%7B%0A%20%20%20%20%20%20startPage%3A%20parseInt(startInput.value%2C%2010)%20%7C%7C%201%2C%0A%20%20%20%20%20%20endPage%3A%20endInput.value%20%3F%20parseInt(endInput.value%2C%2010)%20%3A%20null%2C%0A%20%20%20%20%20%20minDelay%3A%204%2C%0A%20%20%20%20%20%20maxDelay%3A%208%2C%0A%20%20%20%20%20%20withDetails%3A%20detailsInput.checked%0A%20%20%20%20%7D%3B%0A%0A%20%20%20%20try%20%7B%0A%20%20%20%20%20%20var%20records%20%3D%20await%20runExport(config%2C%20ui)%3B%0A%20%20%20%20%20%20currentRecords%20%3D%20records%3B%0A%20%20%20%20%20%20ui.onRecordsUpdated(records)%3B%0A%20%20%20%20%20%20ui.log('Termin%C3%A9%20%3A%20'%20%2B%20records.length%20%2B%20'%20client(s).')%3B%0A%20%20%20%20%7D%20catch%20(e)%20%7B%0A%20%20%20%20%20%20ui.log('ERREUR%20fatale%3A%20'%20%2B%20(e%20%26%26%20e.message%20%3F%20e.message%20%3A%20e))%3B%0A%20%20%20%20%7D%20finally%20%7B%0A%20%20%20%20%20%20startBtn.disabled%20%3D%20false%3B%0A%20%20%20%20%20%20endInput.disabled%20%3D%20false%3B%0A%20%20%20%20%20%20startInput.disabled%20%3D%20false%3B%0A%20%20%20%20%20%20detailsInput.disabled%20%3D%20false%3B%0A%20%20%20%20%20%20stopBtn.disabled%20%3D%20true%3B%0A%20%20%20%20%7D%0A%20%20%7D%3B%0A%7D)()%3B%0A";
+
+  document.getElementById('drag-link').href = BOOKMARKLET_HREF;
+
+  document.getElementById('copy-btn').addEventListener('click', function () {
+    var status = document.getElementById('copy-status');
+    function ok() { status.textContent = '✓ Copié — colle-le dans le champ URL du favori.'; }
+    function fail() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = BOOKMARKLET_HREF;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        ok();
+      } catch (e) {
+        status.textContent = 'Copie automatique indisponible — clic droit sur le bouton favori → copier le lien.';
+      }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(BOOKMARKLET_HREF).then(ok, fail);
+    } else {
+      fail();
+    }
+  });
+</script>

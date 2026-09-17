@@ -1,0 +1,454 @@
+<title>Export SeLoger</title>
+<style>
+  :root {
+    --bg: #F5F3ED;
+    --surface: #FFFFFF;
+    --surface-alt: #EBE6D9;
+    --border: #DAD3C1;
+    --text: #201C15;
+    --text-muted: #635C4E;
+    --accent: #2E5C4E;
+    --accent-strong: #204238;
+    --accent-contrast: #FDFBF6;
+    --warn-bg: #FBEEDC;
+    --warn-text: #7A4A12;
+    --warn-border: #E7C793;
+    --danger: #93321F;
+    --danger-bg: #FBE8E2;
+    --code-bg: #EFEAdd;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171A;
+      --surface: #1B1F22;
+      --surface-alt: #23282C;
+      --border: #343A3F;
+      --text: #EDEAE2;
+      --text-muted: #A6A08F;
+      --accent: #6FBFA3;
+      --accent-strong: #8FD4BA;
+      --accent-contrast: #0B1210;
+      --warn-bg: #2C2313;
+      --warn-text: #E8B978;
+      --warn-border: #4A3A1C;
+      --danger: #E2917C;
+      --danger-bg: #2E1D18;
+      --code-bg: #23282C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171A;
+    --surface: #1B1F22;
+    --surface-alt: #23282C;
+    --border: #343A3F;
+    --text: #EDEAE2;
+    --text-muted: #A6A08F;
+    --accent: #6FBFA3;
+    --accent-strong: #8FD4BA;
+    --accent-contrast: #0B1210;
+    --warn-bg: #2C2313;
+    --warn-text: #E8B978;
+    --warn-border: #4A3A1C;
+    --danger: #E2917C;
+    --danger-bg: #2E1D18;
+    --code-bg: #23282C;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding-inline: 20px;
+    padding-block: 40px;
+    line-height: 1.55;
+  }
+
+  main {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  h1, h2 {
+    font-family: "Newsreader", Georgia, serif;
+    font-weight: 600;
+    text-wrap: balance;
+    color: var(--text);
+    margin: 0 0 8px;
+  }
+
+  h1 { font-size: 2rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.3rem; margin-top: 0; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+
+  .lede {
+    color: var(--text-muted);
+    font-size: 1.02rem;
+    max-width: 58ch;
+  }
+
+  section {
+    margin-top: 40px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .hero-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .bookmarklet-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+
+  #drag-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 12px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    cursor: grab;
+    border: 1px solid var(--accent-strong);
+    white-space: nowrap;
+  }
+  #drag-link:active { cursor: grabbing; }
+
+  .hint {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  #copy-btn {
+    background: var(--surface-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  #copy-btn:hover { border-color: var(--accent); }
+  #copy-status {
+    font-size: 0.8rem;
+    color: var(--accent);
+    min-height: 1.2em;
+  }
+
+  ol.steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  ol.steps li {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+
+  .step-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent-contrast);
+    background: var(--accent);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .step-body strong { display: block; margin-bottom: 2px; }
+  .step-body p { margin: 4px 0 0; color: var(--text-muted); font-size: 0.94rem; }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    background: var(--code-bg);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    font-size: 0.88em;
+  }
+
+  .callout {
+    border-radius: 10px;
+    padding: 16px 18px;
+    border: 1px solid var(--warn-border);
+    background: var(--warn-bg);
+    color: var(--warn-text);
+  }
+  .callout h3 {
+    margin: 0 0 8px;
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+  .callout ul { margin: 0; padding-left: 1.2em; }
+  .callout li { margin-bottom: 6px; }
+  .callout.danger {
+    border-color: var(--danger);
+    background: var(--danger-bg);
+    color: var(--danger);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  table caption { text-align: left; color: var(--text-muted); margin-bottom: 8px; font-size: 0.85rem; }
+  th, td {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--text-muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .table-wrap { overflow-x: auto; }
+
+  details {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    background: var(--surface);
+  }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.85rem;
+  }
+  details[open] summary { margin-bottom: 10px; }
+  details p { color: var(--text-muted); font-size: 0.9rem; }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+  }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 1.6rem; }
+    .bookmarklet-row { flex-direction: column; align-items: stretch; }
+    #drag-link { justify-content: center; }
+  }
+</style>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+
+<main>
+  <div class="eyebrow">Outil interne &middot; annuaire pro SeLoger</div>
+  <h1>Export SeLoger</h1>
+  <p class="lede">
+    Un favori de navigateur qui exporte en CSV les clients d'une page annuaire
+    SeLoger (nom, type, nb d'annonces, adresse, téléphone, SIRET, site web) —
+    sans rien installer. Il tourne dans ta session déjà connectée, pas dans un
+    outil séparé.
+  </p>
+
+  <div class="hero-card">
+    <div class="bookmarklet-row">
+      <a id="drag-link" href="#" draggable="true">🗂️ Export SeLoger</a>
+      <span class="hint">⟵ glisse ce bouton dans ta barre de favoris</span>
+    </div>
+    <div class="bookmarklet-row">
+      <button id="copy-btn" type="button">Copier le code du favori</button>
+      <span id="copy-status" role="status"></span>
+    </div>
+  </div>
+
+  <section>
+    <h2>Installation (une fois)</h2>
+    <div class="card">
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <span class="step-body">
+            <strong>Affiche ta barre de favoris</strong>
+            <p>Si elle n'est pas visible : <code>Ctrl/Cmd + Maj + B</code> dans Chrome, Edge ou Firefox.</p>
+          </span>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <span class="step-body">
+            <strong>Glisse le bouton "🗂️ Export SeLoger" ci-dessus dans la barre</strong>
+            <p>Un nouveau favori apparaît. Tu peux le renommer si tu veux.</p>
+          </span>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <span class="step-body">
+            <strong>Le glisser-déposer ne fonctionne pas ?</strong>
+            <p>
+              Clique "Copier le code du favori", puis dans ta barre de favoris :
+              clic droit &rarr; <em>Ajouter une page</em> (ou <em>Nouveau favori</em>) &rarr;
+              mets un nom (ex: "Export SeLoger") et colle le code copié dans le champ URL/adresse.
+            </p>
+          </span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <h2>À chaque export</h2>
+    <div class="card">
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <span class="step-body">
+            <strong>Va sur la page annuaire du département sur seloger.com</strong>
+            <p>Ex : <code>seloger.com/annuaire/indre-et-loire-37/</code></p>
+          </span>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <span class="step-body">
+            <strong>Clique sur le favori "🗂️ Export SeLoger"</strong>
+            <p>Un petit panneau apparaît en haut à droite de la page.</p>
+          </span>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <span class="step-body">
+            <strong>Choisis les pages, clique "Lancer"</strong>
+            <p>Laisse l'onglet ouvert pendant l'export — ferme le panneau ou change de page l'arrête.</p>
+          </span>
+        </li>
+        <li>
+          <span class="step-num">4</span>
+          <span class="step-body">
+            <strong>Clique "Télécharger le CSV"</strong>
+            <p>Le fichier s'ouvre directement dans Excel (colonnes déjà séparées).</p>
+          </span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="callout danger">
+      <h3>⚠️ À lire avant de lancer un gros export</h3>
+      <ul>
+        <li>SeLoger détecte et bloque temporairement les comportements de scraping trop rapides ou trop volumineux (message "Accès temporairement restreint"). Un blocage touche la connexion de la personne qui l'a déclenché, pas les autres.</li>
+        <li><strong>Découpe les gros départements en tranches</strong> (ex: pages 1-15, pause, puis 16-30) plutôt qu'un export complet d'un coup, surtout pour Paris ou les grandes villes.</li>
+        <li>Si un message de blocage apparaît : arrête, attends quelques heures avant de réessayer sur seloger.com (même en navigation normale). Insister prolonge le blocage.</li>
+        <li>Un seul export à la fois par personne — ne lance pas plusieurs favoris en parallèle sur plusieurs onglets.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Colonnes du CSV</h2>
+    <div class="card table-wrap">
+      <table>
+        <caption>Une ligne par client de l'annuaire</caption>
+        <thead>
+          <tr><th>Colonne</th><th>Contenu</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>nom_client</code></td><td>Nom de l'agence / du professionnel</td></tr>
+          <tr><td><code>type_client</code></td><td>Agence immobilière, agent commercial, notaire...</td></tr>
+          <tr><td><code>nb_annonces_vente</code></td><td>Nombre de biens en vente en ligne</td></tr>
+          <tr><td><code>nb_annonces_location</code></td><td>Nombre de biens en location en ligne</td></tr>
+          <tr><td><code>adresse_postale</code></td><td>Adresse de l'agence (si disponible)</td></tr>
+          <tr><td><code>siret_ou_numero_site</code></td><td>SIRET (fiche "Mentions légales")</td></tr>
+          <tr><td><code>telephone</code></td><td>Numéro de téléphone (si disponible)</td></tr>
+          <tr><td><code>lien_page_pro</code></td><td>Lien vers la fiche pro SeLoger</td></tr>
+          <tr><td><code>site_web_pro</code></td><td>Site web du professionnel (si disponible)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <details>
+      <summary>Détails techniques</summary>
+      <p>
+        Le favori lit le JSON déjà présent dans la page (le même que SeLoger utilise
+        pour afficher l'annuaire), tourne page par page avec des délais entre chaque
+        fiche, et génère le CSV directement dans ton navigateur — aucune donnée
+        n'est envoyée à un serveur externe. C'est la même logique que le script
+        Python <code>scrape_seloger.py</code> du dépôt, adaptée pour tourner sans
+        installation dans un navigateur verrouillé.
+      </p>
+      <p>
+        Un souci technique ou un champ qui sort vide/faux ? Remonte-le avec le nom
+        du département et une copie du message affiché dans le panneau.
+      </p>
+    </details>
+  </section>
+
+  <footer>
+    Usage interne — prospection B2B sur des données professionnelles publiques de l'annuaire SeLoger.
+  </footer>
+</main>
+
+<script>
+  var BOOKMARKLET_HREF = "__BOOKMARKLET_HREF__";
+
+  document.getElementById('drag-link').href = BOOKMARKLET_HREF;
+
+  document.getElementById('copy-btn').addEventListener('click', function () {
+    var status = document.getElementById('copy-status');
+    function ok() { status.textContent = '✓ Copié — colle-le dans le champ URL du favori.'; }
+    function fail() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = BOOKMARKLET_HREF;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        ok();
+      } catch (e) {
+        status.textContent = 'Copie automatique indisponible — clic droit sur le bouton favori → copier le lien.';
+      }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(BOOKMARKLET_HREF).then(ok, fail);
+    } else {
+      fail();
+    }
+  });
+</script>
