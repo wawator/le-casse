@@ -181,17 +181,36 @@
     return best;
   }
 
-  async function extractSiretFromIframe(doc) {
+  function simulateClick(el) {
+    var view = (el.ownerDocument && el.ownerDocument.defaultView) || window;
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function (type) {
+      try {
+        var isPointer = type.indexOf('pointer') === 0;
+        var Ctor = (isPointer && view.PointerEvent) ? view.PointerEvent : view.MouseEvent;
+        var ev = new Ctor(type, { bubbles: true, cancelable: true, composed: true, view: view, button: 0 });
+        el.dispatchEvent(ev);
+      } catch (e) { /* ignore */ }
+    });
+    try { el.click(); } catch (e) { /* ignore */ }
+  }
+
+  async function extractSiretFromIframe(doc, log) {
     var beforeText = doc.body ? doc.body.innerText : '';
     var trigger = findTrigger(doc, MODAL_TRIGGER_TEXTS);
-    if (!trigger) return '';
-    trigger.click();
-    await sleep(900);
+    if (!trigger) {
+      log('    SIRET : bouton "Détails et honoraires" / "Mentions légales" introuvable sur cette fiche.');
+      return '';
+    }
+    simulateClick(trigger);
+    await sleep(1200);
 
     var dialog = doc.querySelector('[role="dialog"]');
     if (dialog) {
       var m = SIRET_PATTERN.exec(dialog.innerText || '');
       if (m) return m[0].replace(/\s/g, '');
+      log('    SIRET : popup ouverte mais aucun numéro à 14 chiffres dedans.');
+    } else {
+      log('    SIRET : bouton cliqué mais aucune popup (role=dialog) détectée ensuite.');
     }
 
     var afterText = doc.body ? doc.body.innerText : '';
@@ -203,10 +222,11 @@
     while ((mm = reAfter.exec(afterText)) !== null) {
       if (!beforeMatches.has(mm[0])) return mm[0].replace(/\s/g, '');
     }
+    log('    SIRET : introuvable (aucun nouveau numéro apparu après le clic).');
     return '';
   }
 
-  async function scrapeDetailPage(url) {
+  async function scrapeDetailPage(url, log) {
     var extra = { adresse_postale: '', siret_ou_numero_site: '', site_web_pro: '', telephone: '', nb_annonces_vente: '', nb_annonces_location: '' };
     var iframe;
     try {
@@ -234,7 +254,7 @@
       }
     }
 
-    try { extra.siret_ou_numero_site = await extractSiretFromIframe(doc); } catch (e) { /* ignore */ }
+    try { extra.siret_ou_numero_site = await extractSiretFromIframe(doc, log); } catch (e) { log('    SIRET : erreur inattendue (' + (e && e.message) + ').'); }
 
     try {
       var propsEl = doc.querySelector('#properties');
@@ -332,7 +352,7 @@
         var record = recordFromIntermediary(batch[i]);
 
         if (config.withDetails && record.lien_page_pro) {
-          var extra = await scrapeDetailPage(record.lien_page_pro);
+          var extra = await scrapeDetailPage(record.lien_page_pro, ui.log);
           Object.keys(extra).forEach(function (k) { if (extra[k]) record[k] = extra[k]; });
         }
 
