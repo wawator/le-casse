@@ -24,6 +24,7 @@
 
   var BASE_URL = location.origin;
 
+  var SIRET_PATTERN = /\b\d{3}\s?\d{3}\s?\d{3}\s?\d{5}\b/;
   var POSTAL_CODE_PATTERN = /\b\d{5}\b/;
 
   var SALE_LABELS = ['vendre', 'vente'];
@@ -34,9 +35,10 @@
   var COUNT_LABEL_THEN_NUMBER = new RegExp('(' + ALL_LABELS + ')\\D{0,3}(\\d[\\d\\s]{0,6})', 'gi');
 
   var INTERMEDIARY_TYPE_LABELS = { 1: 'Agence immobilière', 2: 'Agent commercial', 3: 'Notaire', 4: 'Constructeur', 5: 'Promoteur' };
+  var MODAL_TRIGGER_TEXTS = ['Détails et honoraires', 'Mentions légales'];
   var ADDRESS_KEY_HINTS = ['address', 'adresse'];
   var NEXT_DATA_REGEX = /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/;
-  var CSV_FIELDS = ['nom_client', 'type_client', 'nb_annonces_vente', 'nb_annonces_location', 'adresse_postale', 'lien_page_pro'];
+  var CSV_FIELDS = ['nom_client', 'type_client', 'nb_annonces_vente', 'nb_annonces_location', 'adresse_postale', 'siret_ou_numero_site', 'lien_page_pro'];
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function randomDelay(min, max) { return sleep((min + Math.random() * (max - min)) * 1000); }
@@ -100,6 +102,7 @@
       nb_annonces_vente: '',
       nb_annonces_location: '',
       adresse_postale: '',
+      siret_ou_numero_site: '',
       lien_page_pro: item.url ? new URL(item.url, BASE_URL).toString() : ''
     };
   }
@@ -144,11 +147,17 @@
   function loadHiddenIframe(url) {
     return new Promise(function (resolve, reject) {
       var iframe = document.createElement('iframe');
+      // Taille réaliste (comme une vraie fenêtre desktop) plutôt que 1x1px :
+      // un iframe minuscule peut faire basculer le site en mise en page
+      // responsive et cacher/dupliquer des boutons (dont potentiellement
+      // "Détails et honoraires"). Placé hors écran, pas en opacity:0, pour
+      // rester invisible sans passer par un état "caché" côté CSS.
       iframe.style.position = 'fixed';
-      iframe.style.width = '1px';
-      iframe.style.height = '1px';
-      iframe.style.opacity = '0';
-      iframe.style.pointerEvents = 'none';
+      iframe.style.top = '0';
+      iframe.style.left = '-10000px';
+      iframe.style.width = '1280px';
+      iframe.style.height = '900px';
+      iframe.style.border = '0';
       iframe.src = url;
       var timeout = setTimeout(function () { reject(new Error('timeout')); }, 20000);
       iframe.onload = function () { clearTimeout(timeout); resolve(iframe); };
@@ -157,8 +166,84 @@
     });
   }
 
+  function findTrigger(doc, texts) {
+    var all = doc.querySelectorAll('button, a, span, div, p');
+    var candidates = [];
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      var t = (el.textContent || '').trim();
+      if (!t || t.length > 80) continue;
+      for (var j = 0; j < texts.length; j++) {
+        if (t.indexOf(texts[j]) !== -1) { candidates.push(el); break; }
+      }
+    }
+    if (!candidates.length) return null;
+    // Si le site a un doublon caché par media query (souvent le cas pour un
+    // menu mobile/desktop), on préfère un élément réellement rendu
+    // (offsetParent non nul) à un doublon display:none.
+    var visible = candidates.filter(function (el) { return el.offsetParent !== null; });
+    var pool = visible.length ? visible : candidates;
+    pool.sort(function (a, b) { return a.textContent.trim().length - b.textContent.trim().length; });
+    var best = pool[0];
+    var interactive = best.closest('button, a, [role="button"], [tabindex]');
+    return interactive || best;
+  }
+
+  function simulateClick(el) {
+    var view = (el.ownerDocument && el.ownerDocument.defaultView) || window;
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function (type) {
+      try {
+        var isPointer = type.indexOf('pointer') === 0;
+        var Ctor = (isPointer && view.PointerEvent) ? view.PointerEvent : view.MouseEvent;
+        var ev = new Ctor(type, { bubbles: true, cancelable: true, composed: true, view: view, button: 0 });
+        el.dispatchEvent(ev);
+      } catch (e) { /* ignore */ }
+    });
+    try { el.click(); } catch (e) { /* ignore */ }
+  }
+
+  async function extractSiretFromIframe(doc, log) {
+    var beforeText = doc.body ? doc.body.innerText : '';
+    var trigger = findTrigger(doc, MODAL_TRIGGER_TEXTS);
+    if (!trigger) {
+      log('    SIRET : bouton "Détails et honoraires" / "Mentions légales" introuvable.');
+      return '';
+    }
+    var visible = trigger.offsetParent !== null;
+    log('    SIRET : clic sur <' + trigger.tagName.toLowerCase() + '> visible=' + visible +
+      ' texte="' + trigger.textContent.trim().slice(0, 40) + '"');
+    if (!visible) {
+      log('    SIRET : élément non rendu (offsetParent=null) — probablement caché par une media query, clic sans effet attendu.');
+    }
+    simulateClick(trigger);
+    await sleep(2000);
+
+    var afterText = doc.body ? doc.body.innerText : '';
+    log('    SIRET : texte de la page ' + beforeText.length + ' -> ' + afterText.length + ' caractères après clic.');
+
+    var dialog = doc.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"]');
+    if (dialog) {
+      var m = SIRET_PATTERN.exec(dialog.innerText || '');
+      if (m) return m[0].replace(/\s/g, '');
+      log('    SIRET : popup ouverte mais aucun numéro à 14 chiffres dedans.');
+    } else {
+      log('    SIRET : bouton cliqué mais aucune popup (dialog/alertdialog/aria-modal) détectée ensuite.');
+    }
+
+    var beforeMatches = new Set();
+    var reBefore = new RegExp(SIRET_PATTERN.source, 'g');
+    var mm;
+    while ((mm = reBefore.exec(beforeText)) !== null) beforeMatches.add(mm[0]);
+    var reAfter = new RegExp(SIRET_PATTERN.source, 'g');
+    while ((mm = reAfter.exec(afterText)) !== null) {
+      if (!beforeMatches.has(mm[0])) return mm[0].replace(/\s/g, '');
+    }
+    log('    SIRET : introuvable (aucun nouveau numéro apparu après le clic).');
+    return '';
+  }
+
   async function scrapeDetailPage(url, log) {
-    var extra = { adresse_postale: '', nb_annonces_vente: '', nb_annonces_location: '' };
+    var extra = { adresse_postale: '', siret_ou_numero_site: '', nb_annonces_vente: '', nb_annonces_location: '' };
     var iframe;
     try {
       iframe = await loadHiddenIframe(url);
@@ -176,6 +261,8 @@
     if (nextData) {
       extra.adresse_postale = firstNonEmpty(findValuesByKeyHints(nextData, ADDRESS_KEY_HINTS));
     }
+
+    try { extra.siret_ou_numero_site = await extractSiretFromIframe(doc, log); } catch (e) { log('    SIRET : erreur inattendue (' + (e && e.message) + ').'); }
 
     try {
       var propsEl = doc.querySelector('#properties');
@@ -299,7 +386,7 @@
       '<label style="flex:1;">Page début<br><input id="sl-start" type="number" min="1" value="1" style="width:100%;box-sizing:border-box;"></label>' +
       '<label style="flex:1;">Page fin<br><input id="sl-end" type="number" min="1" placeholder="(toutes)" style="width:100%;box-sizing:border-box;"></label>' +
       '</div>' +
-      '<label style="display:block;margin-bottom:8px;"><input id="sl-details" type="checkbox" checked> Adresse et nb d\'annonces (plus lent)</label>' +
+      '<label style="display:block;margin-bottom:8px;"><input id="sl-details" type="checkbox" checked> Adresse, SIRET et nb d\'annonces (plus lent)</label>' +
       '<div style="display:flex;gap:8px;margin-bottom:8px;">' +
       '<button id="sl-start-btn" style="flex:1;padding:6px;background:#c0102f;color:#fff;border:none;border-radius:4px;cursor:pointer;">Lancer</button>' +
       '<button id="sl-stop-btn" style="flex:1;padding:6px;border-radius:4px;cursor:pointer;" disabled>Arrêter</button>' +
